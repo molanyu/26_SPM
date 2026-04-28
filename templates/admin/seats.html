@@ -1,0 +1,73 @@
+<section class="panel-grid" data-template="admin-seats">
+  <article class="panel">
+    <div class="section-head">
+      <div>
+        <h3>筛选与新建座位</h3>
+        <p>先按自习室缩小范围，再维护座位编号、名称和属性；筛选与表单沿用同一套后台布局语言。</p>
+      </div>
+    </div>
+    <div class="metric-grid">
+      <div class="metric">
+        <strong>{{ seat_count }}</strong>
+        <span>当前列表数量</span>
+      </div>
+      <div class="metric">
+        <strong>{{ active_seat_count }}</strong>
+        <span>启用中的座位</span>
+      </div>
+      <div class="metric">
+        <strong>{{ window_seat_count }}</strong>
+        <span>靠窗座位</span>
+      </div>
+    </div>
+
+    <form method="get" action="/admin/seats" class="form-shell filter-bar" data-form-variant="admin-shared">
+      <div class="fields">
+        <label>
+          筛选自习室
+          <select name="room_id">{{{ filter_room_options_html }}}</select>
+        </label>
+      </div>
+      <div class="form-actions"><button class="secondary" type="submit">应用筛选</button></div>
+    </form>
+
+    <form method="post" action="/admin/seats/page" class="form-shell" data-form-variant="admin-shared">
+      <input type="hidden" name="form_action" value="create">
+      <input type="hidden" name="filter_room_id" value="{{ selected_room_id }}">
+      <div class="fields">
+        <label>所属自习室<select name="room_id" required>{{{ create_room_options_html }}}</select></label>
+        <label>座位编号<input name="seat_code" value="{{ create_seat_code }}" required></label>
+        <label>座位名称<input name="seat_label" value="{{ create_seat_label }}" required></label>
+      </div>
+      <div class="form-section">
+        <div class="form-section-head">
+          <div>
+            <h4>开放状态</h4>
+            <p>把立即启用独立成表单开关，语义更清楚，也更符合后台操作习惯。</p>
+          </div>
+        </div>
+        {{{ create_active_toggle_html }}}
+      </div>
+      <div class="form-section">
+        <div class="form-section-head">
+          <div>
+            <h4>座位属性</h4>
+            <p>属性选项改为统一的轻量开关组件，不再使用笨重的大块勾选按钮。</p>
+          </div>
+        </div>
+        <div class="toggle-grid" data-toggle-group="seat-attributes">{{{ create_attribute_toggles_html }}}</div>
+      </div>
+      <div class="form-actions"><button type="submit">创建座位</button></div>
+    </form>
+  </article>
+
+  <article class="panel">
+    <div class="section-head">
+      <div>
+        <h3>座位列表</h3>
+        <p>当前查看范围：{{ selected_room_label }}。展开任一卡片即可修改归属、编号和属性。</p>
+      </div>
+    </div>
+    <div class="list-grid">{{{ seat_cards_html }}}</div>
+  </article>
+</section>

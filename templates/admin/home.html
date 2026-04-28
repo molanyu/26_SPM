@@ -1,0 +1,19 @@
+<section class="panel-grid" data-template="admin-home">
+  <article class="panel">
+    <div class="section-head">
+      <div>
+        <h3>{{ hero_title }}</h3>
+        <p>{{ hero_description }}</p>
+      </div>
+    </div>
+  </article>
+  <article class="panel">
+    <div class="section-head">
+      <div>
+        <h3>快捷入口</h3>
+        <p>以下入口会按当前账号权限自动裁剪，页面上的可见性不会替代服务端权限校验。</p>
+      </div>
+    </div>
+    <div class="cards">{{{ shortcuts_html }}}</div>
+  </article>
+</section>

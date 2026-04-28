@@ -1,0 +1,56 @@
+<view class="page">
+  <view class="nav-row">
+    <view class="nav-link" bindtap="goToRooms">自习室</view>
+    <view class="nav-link" bindtap="goToCheckin">签到</view>
+    <view class="nav-link" bindtap="goToAssistant">助手</view>
+  </view>
+
+  <view class="card">
+    <view class="section-title">取消原因</view>
+    <input class="input" value="{{cancelReason}}" bindinput="onCancelReasonInput" />
+  </view>
+
+  <view class="card">
+    <view class="section-title">当前有效预约</view>
+    <view wx:if="{{loading}}" class="empty">加载中...</view>
+    <view wx:elif="{{!currentItems.length}}" class="empty">当前没有有效预约</view>
+    <view wx:for="{{currentItems}}" wx:key="reservation_id" class="card">
+      <view class="item-title">预约 #{{item.reservation_id}}</view>
+      <view class="item-meta">状态：{{item.status}}</view>
+      <view class="item-meta">房间：{{item.room_id}} / 座位：{{item.seat_id}}</view>
+      <view class="item-meta">开始：{{item.startLabel}}</view>
+      <view class="item-meta">结束：{{item.endLabel}}</view>
+      <button
+        wx:if="{{item.canCancel}}"
+        class="button-danger"
+        data-reservation-id="{{item.reservation_id}}"
+        bindtap="cancelReservation"
+      >
+        取消预约
+      </button>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="section-title">历史预约</view>
+    <view wx:if="{{!historyItems.length}}" class="empty">暂无历史预约</view>
+    <view wx:for="{{historyItems}}" wx:key="reservation_id" class="card">
+      <view class="item-title">预约 #{{item.reservation_id}}</view>
+      <view class="item-meta">状态：{{item.status}}</view>
+      <view class="item-meta">房间：{{item.room_id}} / 座位：{{item.seat_id}}</view>
+      <view class="item-meta">开始：{{item.startLabel}}</view>
+      <view class="item-meta">结束：{{item.endLabel}}</view>
+      <view class="item-meta" wx:if="{{item.cancel_reason}}">取消原因：{{item.cancel_reason}}</view>
+      <button
+        wx:if="{{item.canRebook}}"
+        class="button-secondary"
+        data-seat-id="{{item.seat_id}}"
+        data-start-time="{{item.start_time}}"
+        data-end-time="{{item.end_time}}"
+        bindtap="rebookReservation"
+      >
+        再次预约
+      </button>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,16 @@
+<view class="page">
+  <view class="card">
+    <view class="title">自习预约学生端</view>
+    <view class="subtitle">使用现有学生账号登录，进入预约、签到和助手查询主链路。</view>
+  </view>
+
+  <view class="card">
+    <text class="label">学号</text>
+    <input class="input" placeholder="例如 20240001" value="{{studentNo}}" bindinput="onStudentNoInput" />
+
+    <text class="label">密码</text>
+    <input class="input" password placeholder="请输入密码" value="{{password}}" bindinput="onPasswordInput" />
+
+    <button class="button-primary" loading="{{loading}}" bindtap="submitLogin">登录并进入</button>
+  </view>
+</view>

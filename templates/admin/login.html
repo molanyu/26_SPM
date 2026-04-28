@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理员登录 - SPM 管理后台</title>
+  <script data-admin-theme-script="admin_theme.js">{{{ admin_theme_script }}}</script>
+  <style data-admin-theme-source="admin_theme.css">{{{ admin_theme_css }}}</style>
+</head>
+<body class="public-admin-page" data-template="admin-login">
+  <main class="login-shell">
+    <section class="login-card">
+      <div class="login-head">
+        <div>
+          <p class="eyebrow">SPM 管理后台</p>
+          <h1>管理员登录</h1>
+        </div>
+        <button class="theme-toggle" type="button" data-theme-toggle>
+          <span class="theme-toggle__label">当前主题</span>
+          <span class="theme-toggle__value" data-theme-toggle-value>浅色</span>
+        </button>
+      </div>
+      <p class="intro">使用管理员邮箱与密码登录后台。登录状态仍沿用现有 session 机制，不改变现有权限闭环。</p>
+      {{{ error_notice_html }}}
+      <form method="post" action="/admin/login" class="form-shell" data-form-variant="admin-shared">
+        <input type="hidden" name="next" value="{{ next_path }}">
+        <label>
+          邮箱
+          <input type="text" name="email" value="{{ email }}" autocomplete="username" required>
+        </label>
+        <label>
+          密码
+          <input type="password" name="password" autocomplete="current-password" required>
+        </label>
+        <button type="submit">登录后台</button>
+      </form>
+      <div class="hint">{{ bootstrap_hint }}</div>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,61 @@
+<view class="page">
+  <view class="nav-row">
+    <view class="nav-link" bindtap="goToRooms">返回自习室</view>
+    <view class="nav-link" bindtap="goToReservations">我的预约</view>
+  </view>
+
+  <view class="card">
+    <view class="title">{{roomName}}</view>
+    <view class="subtitle">选择时间和属性后，直接对座位发起预约。</view>
+  </view>
+
+  <view class="card">
+    <view class="section-title">预约条件</view>
+    <text class="label">日期</text>
+    <picker mode="date" value="{{date}}" bindchange="onDateChange">
+      <view class="picker-value">{{date}}</view>
+    </picker>
+
+    <view class="inline-row">
+      <view class="inline-col">
+        <text class="label">开始时间</text>
+        <picker mode="time" value="{{startTime}}" bindchange="onStartTimeChange">
+          <view class="picker-value">{{startTime}}</view>
+        </picker>
+      </view>
+      <view class="inline-col">
+        <text class="label">结束时间</text>
+        <picker mode="time" value="{{endTime}}" bindchange="onEndTimeChange">
+          <view class="picker-value">{{endTime}}</view>
+        </picker>
+      </view>
+    </view>
+
+    <view class="switch-row">
+      <text>仅看靠窗</text>
+      <switch checked="{{isWindowSide}}" bindchange="onWindowToggle" />
+    </view>
+    <view class="switch-row">
+      <text>仅看电源插座</text>
+      <switch checked="{{hasPowerSocket}}" bindchange="onPowerToggle" />
+    </view>
+    <view class="switch-row">
+      <text>仅看网口</text>
+      <switch checked="{{hasTrackSocket}}" bindchange="onTrackToggle" />
+    </view>
+
+    <button class="button-secondary" bindtap="loadSeats">刷新座位</button>
+  </view>
+
+  <view class="card">
+    <view class="section-title">可预约座位</view>
+    <view wx:if="{{loading}}" class="empty">加载中...</view>
+    <view wx:elif="{{!seats.length}}" class="empty">当前筛选下没有座位</view>
+    <view wx:for="{{seats}}" wx:key="seat_id" class="card">
+      <view class="item-title">{{item.seat_code}} / {{item.seat_label}}</view>
+      <view class="item-meta">状态：{{item.status}}</view>
+      <view class="item-meta">靠窗：{{item.windowLabel}} / 电源：{{item.powerLabel}} / 网口：{{item.trackLabel}}</view>
+      <button class="button-primary" data-seat-id="{{item.seat_id}}" bindtap="createReservation">预约这个座位</button>
+    </view>
+  </view>
+</view>

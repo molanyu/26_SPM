@@ -1,0 +1,1 @@
+powershell -ExecutionPolicy Bypass -File .\scripts\start_backend.ps1 -StartDockerDb

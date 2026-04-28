@@ -1,0 +1,5 @@
+.card .card {
+  margin: 18rpx 0 0;
+  background: #f8fafc;
+  box-shadow: none;
+}

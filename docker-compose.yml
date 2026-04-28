@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-spm}
+      POSTGRES_USER: ${POSTGRES_USER:-spm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-spm}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-spm} -d ${POSTGRES_DB:-spm}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_NAME: ${APP_NAME:-SPM Study Room API}
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql+psycopg://spm:spm@db:5432/spm}
+      DATABASE_AUTO_CREATE: "false"
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-spm-dev-secret}
+      IDENTITY_BOOTSTRAP_ENABLED: ${IDENTITY_BOOTSTRAP_ENABLED:-false}
+      IDENTITY_BOOTSTRAP_ADMIN_EMAIL: ${IDENTITY_BOOTSTRAP_ADMIN_EMAIL:-}
+      IDENTITY_BOOTSTRAP_ADMIN_NAME: ${IDENTITY_BOOTSTRAP_ADMIN_NAME:-System Admin}
+      IDENTITY_BOOTSTRAP_ADMIN_PASSWORD: ${IDENTITY_BOOTSTRAP_ADMIN_PASSWORD:-}
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "${APP_PORT:-8000}:8000"
+
+volumes:
+  postgres_data:

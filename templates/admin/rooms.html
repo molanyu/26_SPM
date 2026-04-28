@@ -1,0 +1,93 @@
+<section class="panel-grid" data-template="admin-rooms">
+  <article class="panel">
+    <div class="section-head">
+      <div>
+        <h3>新建自习室</h3>
+        <p>使用“开放范围 + 院系选择”替代手填院系编号，降低创建和编辑时的误输入风险。</p>
+      </div>
+    </div>
+    <div class="metric-grid">
+      <div class="metric">
+        <strong>{{ room_count }}</strong>
+        <span>自习室总数</span>
+      </div>
+      <div class="metric">
+        <strong>{{ active_room_count }}</strong>
+        <span>当前启用</span>
+      </div>
+      <div class="metric">
+        <strong>{{ department_only_room_count }}</strong>
+        <span>院系专属</span>
+      </div>
+    </div>
+    <form method="post" action="/admin/rooms/page" class="form-shell" data-form-variant="admin-shared" data-room-form="true">
+      <input type="hidden" name="form_action" value="create">
+      <div class="fields">
+        <label>自习室名称<input name="name" value="{{ create_name }}" required></label>
+        <label>位置说明<input name="location" value="{{ create_location }}" required></label>
+        <label>
+          开放范围
+          <select name="access_scope">{{{ create_scope_options_html }}}</select>
+        </label>
+        <label data-department-field>
+          所属院系
+          <select name="department_id">{{{ create_department_options_html }}}</select>
+        </label>
+        <label>开放时间<input type="time" step="60" name="open_time" value="{{ create_open_time }}" required></label>
+        <label>关闭时间<input type="time" step="60" name="close_time" value="{{ create_close_time }}" required></label>
+      </div>
+      <div class="form-section">
+        <div class="form-section-head">
+          <div>
+            <h4>开放状态</h4>
+            <p>统一使用更轻的开关样式，减少创建表单里的视觉负担。</p>
+          </div>
+        </div>
+        <label class="switch-field" data-switch-style="compact" data-switch-purpose="immediate-activation">
+          <input type="checkbox" name="is_active"{{{ create_active_checked }}}>
+          <span class="switch-ui" aria-hidden="true"></span>
+          <span class="switch-copy">
+            <strong>创建后立即启用</strong>
+            <span>保存后自习室会直接对目标开放范围生效。</span>
+          </span>
+        </label>
+      </div>
+      <p class="form-hint">公共开放不会限制院系；选择“院系专属”后，必须从下拉列表中选择有效院系。</p>
+      <div class="form-actions"><button type="submit">创建自习室</button></div>
+    </form>
+  </article>
+
+  <article class="panel">
+    <div class="section-head">
+      <div>
+        <h3>已有自习室</h3>
+        <p>展开卡片即可修改名称、位置、开放范围和时间；停用操作会保留历史数据。</p>
+      </div>
+    </div>
+    <div class="list-grid">{{{ room_cards_html }}}</div>
+  </article>
+</section>
+<script>
+  (function () {
+    var forms = document.querySelectorAll('[data-room-form="true"]');
+    for (var index = 0; index < forms.length; index += 1) {
+      var form = forms[index];
+      var scope = form.querySelector('select[name="access_scope"]');
+      var departmentField = form.querySelector('[data-department-field]');
+      var departmentSelect = form.querySelector('select[name="department_id"]');
+      if (!scope || !departmentField || !departmentSelect) {
+        continue;
+      }
+      var syncDepartmentField = function () {
+        var isDepartment = scope.value === 'department';
+        departmentField.hidden = !isDepartment;
+        departmentSelect.disabled = !isDepartment;
+        if (!isDepartment) {
+          departmentSelect.value = '';
+        }
+      };
+      scope.addEventListener('change', syncDepartmentField);
+      syncDepartmentField();
+    }
+  }());
+</script>

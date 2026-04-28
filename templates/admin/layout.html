@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ page_title }} - SPM 管理后台</title>
+  <script data-admin-theme-script="admin_theme.js">{{{ admin_theme_script }}}</script>
+  <style data-admin-theme-source="admin_theme.css">{{{ admin_theme_css }}}</style>
+</head>
+<body data-layout="admin-layout">
+  <div class="app-shell">
+    <aside class="sidebar">
+      <section class="brand">
+        <p class="eyebrow">SPM 管理后台</p>
+        <h1>后台工作台</h1>
+        <p>保持现有会话、权限和路由结构不变，在同一套后台壳层里处理角色、资源与系统配置任务。</p>
+      </section>
+      <nav class="nav" aria-label="后台导航">
+        <ul class="nav-list">{{{ menu_items_html }}}</ul>
+      </nav>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div class="page-head">
+          <p class="eyebrow">管理页面</p>
+          <h2>{{ page_title }}</h2>
+          <p>{{ page_intro }}</p>
+        </div>
+        <div class="topbar-tools">
+          <button class="theme-toggle" type="button" data-theme-toggle>
+            <span class="theme-toggle__label">当前主题</span>
+            <span class="theme-toggle__value" data-theme-toggle-value>浅色</span>
+          </button>
+          <section class="user-panel">
+            <strong>{{ current_admin_name }}</strong>
+            <div class="meta">管理员 ID：{{ current_admin_id }}</div>
+            <div class="meta">登录邮箱：{{ current_admin_email }}</div>
+            <form method="post" action="/admin/logout">
+              <div class="actions"><button class="secondary" type="submit">退出登录</button></div>
+            </form>
+          </section>
+        </div>
+      </header>
+      <section class="notice-stack">
+        {{{ success_notice_html }}}
+        {{{ error_notice_html }}}
+      </section>
+      {{{ body_html }}}
+    </main>
+  </div>
+</body>
+</html>

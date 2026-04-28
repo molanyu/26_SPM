@@ -1,0 +1,38 @@
+<section class="panel-grid" data-template="admin-reservation-actions">
+  <article class="panel">
+    <div class="section-head">
+      <div>
+        <h3>代创建预约</h3>
+        <p>输入目标用户、座位和时间段后，由预约服务统一校验冲突和规则。</p>
+      </div>
+    </div>
+    <form method="post" action="/admin/reservations/actions/page">
+      <input type="hidden" name="form_action" value="create">
+      <div class="fields">
+        <label>用户 ID<input name="user_id" value="{{ create_user_id }}"></label>
+        <label>座位 ID<input name="seat_id" value="{{ create_seat_id }}"></label>
+        <label>开始时间<input type="datetime-local" name="start_time" value="{{ create_start_time }}" placeholder="2026-04-18T10:00"></label>
+        <label>结束时间<input type="datetime-local" name="end_time" value="{{ create_end_time }}" placeholder="2026-04-18T12:00"></label>
+      </div>
+      <div class="actions"><button type="submit">提交预约</button></div>
+    </form>
+    {{{ create_result_html }}}
+  </article>
+  <article class="panel">
+    <div class="section-head">
+      <div>
+        <h3>代取消预约</h3>
+        <p>取消操作同样走服务端公开接口，页面只收集必要参数。</p>
+      </div>
+    </div>
+    <form method="post" action="/admin/reservations/actions/page">
+      <input type="hidden" name="form_action" value="cancel">
+      <div class="fields">
+        <label>预约 ID<input name="reservation_id" value="{{ cancel_reservation_id }}"></label>
+        <label>取消原因<input name="reason" value="{{ cancel_reason }}"></label>
+      </div>
+      <div class="actions"><button class="danger" type="submit">提交取消</button></div>
+    </form>
+    {{{ cancel_result_html }}}
+  </article>
+</section>

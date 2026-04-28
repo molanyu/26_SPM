@@ -1,0 +1,35 @@
+<section class="panel-grid" data-template="admin-violations">
+  <article class="panel">
+    <div class="section-head">
+      <div>
+        <h3>筛选条件</h3>
+        <p>支持按用户、自习室、日期范围和分页参数查询违约记录。</p>
+      </div>
+    </div>
+    <form method="get" action="/admin/violations">
+      <div class="fields">
+        <label>用户 ID<input name="user_id" value="{{ filter_user_id }}"></label>
+        <label>自习室 ID<input name="room_id" value="{{ filter_room_id }}"></label>
+        <label>开始日期<input type="date" name="date_from" value="{{ filter_date_from }}" placeholder="2026-04-17"></label>
+        <label>结束日期<input type="date" name="date_to" value="{{ filter_date_to }}" placeholder="2026-04-17"></label>
+        <label>页码<input type="number" min="1" name="page" value="{{ filter_page }}"></label>
+        <label>每页条数<input type="number" min="1" name="page_size" value="{{ filter_page_size }}"></label>
+      </div>
+      <div class="actions"><button class="secondary" type="submit">查询记录</button></div>
+    </form>
+  </article>
+  <article class="panel">
+    <div class="section-head">
+      <div>
+        <h3>违约记录</h3>
+        <p class="muted">共 {{ violations_total }} 条记录</p>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>违约 ID</th><th>用户</th><th>预约</th><th>自习室</th><th>类型</th><th>发生时间</th></tr></thead>
+        <tbody>{{{ violation_rows_html }}}</tbody>
+      </table>
+    </div>
+  </article>
+</section>

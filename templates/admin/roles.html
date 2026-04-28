@@ -1,0 +1,122 @@
+<section class="panel-grid" data-template="admin-roles">
+  <article class="panel">
+    <div class="section-head">
+      <div>
+        <h3>角色与分配工作台</h3>
+        <p>把角色概览、创建、编辑和用户分配拆成清晰分区，避免把复杂编辑器重新塞回列表本身。</p>
+      </div>
+    </div>
+    <div class="metric-grid">
+      <div class="metric">
+        <strong>{{ role_count }}</strong>
+        <span>角色总数</span>
+      </div>
+      <div class="metric">
+        <strong>{{ active_role_count }}</strong>
+        <span>启用中的角色</span>
+      </div>
+      <div class="metric">
+        <strong>{{ inactive_role_count }}</strong>
+        <span>已停用角色</span>
+      </div>
+      <div class="metric">
+        <strong>{{ permission_count }}</strong>
+        <span>可配置权限</span>
+      </div>
+    </div>
+    <div class="page-actions">
+      <a class="action-link" href="#role-create">新建角色</a>
+      <a class="action-link secondary-link" href="#role-editor">编辑已有角色</a>
+      <a class="action-link secondary-link" href="#user-role-entry">为用户分配角色</a>
+    </div>
+  </article>
+
+  <section class="split-grid">
+    <article class="panel" id="role-create">
+      <div class="section-head">
+        <div>
+          <h3>新建角色</h3>
+          <p>先定义角色职责，再勾选它真正需要的权限，减少复制旧配置带来的历史包袱。</p>
+        </div>
+      </div>
+      <form method="post" action="/admin/roles/page" class="form-shell" data-form-variant="admin-shared">
+        <input type="hidden" name="form_action" value="create">
+        <div class="fields">
+          <label>角色名称<input name="name" value="{{ create_name }}" required></label>
+          <label>角色编码<input name="code" value="{{ create_code }}" required></label>
+          <label>角色说明<input name="description" value="{{ create_description }}"></label>
+        </div>
+        <div class="form-section">
+          <div class="form-section-head">
+            <div>
+              <h4>角色状态</h4>
+              <p>把启用状态做成轻量开关，避免它在表单里显得像一个普通布尔字段。</p>
+            </div>
+          </div>
+          <label class="switch-field" data-switch-style="compact" data-switch-purpose="immediate-activation">
+            <input type="checkbox" name="is_active"{{{ create_is_active_checked }}}>
+            <span class="switch-ui" aria-hidden="true"></span>
+            <span class="switch-copy">
+              <strong>创建后立即启用</strong>
+              <span>保存后角色会直接进入可分配状态。</span>
+            </span>
+          </label>
+        </div>
+        <div class="form-section">
+          <div class="form-section-head">
+            <div>
+              <h4>权限选择</h4>
+              <p>权限使用统一清单布局，便于快速浏览说明并减少横向噪音。</p>
+            </div>
+          </div>
+          <div class="selection-list">{{{ create_permissions_html }}}</div>
+        </div>
+        <div class="form-actions"><button type="submit">创建角色</button></div>
+      </form>
+    </article>
+
+    <article class="panel" id="user-role-entry">
+      <div class="section-head">
+        <div>
+          <h3>进入用户角色分配</h3>
+          <p>按用户 ID、邮箱或学号直接进入分配页，不再依赖手动拼接后台 URL。</p>
+        </div>
+      </div>
+      <form method="post" action="/admin/roles/page" class="form-shell" data-form-variant="admin-shared">
+        <input type="hidden" name="form_action" value="locate_user_roles">
+        <label>
+          目标用户
+          <input name="target_user" value="{{ target_lookup_value }}" placeholder="例如：12、target@example.com、20240001" required>
+        </label>
+        <p class="form-hint">如果纯数字同时可能是用户 ID 和学号，请使用 <code>id:</code> 或 <code>student:</code> 前缀重新输入。</p>
+        <div class="form-actions"><button type="submit">打开角色分配页</button></div>
+      </form>
+    </article>
+  </section>
+
+  <section class="split-grid">
+    <article class="panel">
+      <div class="section-head">
+        <div>
+          <h3>已有角色</h3>
+          <p>列表只负责帮助你浏览当前角色现状；真正的修改会在右侧独立编辑区完成。</p>
+        </div>
+      </div>
+      <div class="record-list">{{{ role_cards_html }}}</div>
+    </article>
+
+    <article class="panel" id="role-editor">
+      {{{ edit_panel_html }}}
+    </article>
+  </section>
+
+  <article class="panel" id="permission-reference">
+    <div class="section-head">
+      <div>
+        <h3>权限参考</h3>
+        <p>调整角色前先核对每个权限的用途，避免只看编码猜含义。</p>
+      </div>
+    </div>
+    <div class="reference-list">{{{ permission_reference_html }}}</div>
+  </article>
+</section>

@@ -1,0 +1,9 @@
+{
+  "desc": "SPM student mini program sitemap",
+  "rules": [
+    {
+      "action": "allow",
+      "page": "*"
+    }
+  ]
+}

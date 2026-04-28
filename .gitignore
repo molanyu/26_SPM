@@ -1,0 +1,6 @@
+# Full private-backup mode.
+# Keep project files, local data, docs, courseware, and runtime artifacts trackable.
+#
+# Git cannot store another repository's internal .git metadata as ordinary files.
+# The sdd-riper working files are trackable; only its nested repository metadata is excluded.
+sdd-riper/.git/

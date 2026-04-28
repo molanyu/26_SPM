@@ -1,0 +1,2 @@
+"""Resource module."""
+

@@ -1,0 +1,85 @@
+<section class="panel-grid" data-template="admin-statistics">
+  <article class="panel">
+    <div class="section-head">
+      <div>
+        <h3>查询条件</h3>
+        <p>统计查询继续复用既有使用率接口，只补一层后台筛选页与结果展示。</p>
+      </div>
+    </div>
+    <form method="get" action="/admin/statistics" class="filter-bar">
+      <div class="fields">
+        <label>开始日期<input type="date" name="date_from" value="{{ filter_date_from }}" required></label>
+        <label>结束日期<input type="date" name="date_to" value="{{ filter_date_to }}" required></label>
+      </div>
+      <div class="form-actions"><button class="secondary" type="submit">查询统计</button></div>
+    </form>
+  </article>
+
+  <article class="panel">
+    <div class="section-head">
+      <div>
+        <h3>概览</h3>
+        <p>先看总体预约时长和违约情况，再往下查看房间与座位明细。</p>
+      </div>
+    </div>
+    <div class="metric-grid">
+      <div class="metric">
+        <strong>{{ overview_reserved_minutes }}</strong>
+        <span>总预约分钟数</span>
+      </div>
+      <div class="metric">
+        <strong>{{ overview_violation_count }}</strong>
+        <span>总违约次数</span>
+      </div>
+      <div class="metric">
+        <strong>{{ overview_violation_rate }}</strong>
+        <span>整体违约率</span>
+      </div>
+    </div>
+  </article>
+
+  <section class="split-grid">
+    <article class="panel">
+      <div class="section-head">
+        <div>
+          <h3>房间使用率</h3>
+          <p>按自习室维度查看当前日期范围内的使用率。</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>自习室 ID</th>
+              <th>自习室名称</th>
+              <th>使用率</th>
+            </tr>
+          </thead>
+          <tbody>{{{ room_rows_html }}}</tbody>
+        </table>
+      </div>
+    </article>
+
+    <article class="panel">
+      <div class="section-head">
+        <div>
+          <h3>座位使用率</h3>
+          <p>按座位维度查看当前日期范围内的使用率。</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>座位 ID</th>
+              <th>座位编号</th>
+              <th>自习室 ID</th>
+              <th>使用率</th>
+            </tr>
+          </thead>
+          <tbody>{{{ seat_rows_html }}}</tbody>
+        </table>
+      </div>
+    </article>
+  </section>
+</section>

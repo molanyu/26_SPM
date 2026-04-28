@@ -1,0 +1,55 @@
+<section class="panel-grid" data-template="admin-user-roles">
+  <article class="panel">
+    <div class="section-head">
+      <div>
+        <h3>当前分配对象</h3>
+        <p>先确认你正在调整哪位用户，再整体替换其角色集合，避免误把角色分配给错误对象。</p>
+      </div>
+      <div class="actions">
+        <a class="action-link secondary-link" href="/admin/roles#user-role-entry">重新选择用户</a>
+        <a class="action-link secondary-link" href="/admin/roles">返回角色管理</a>
+      </div>
+    </div>
+    {{{ target_user_summary_html }}}
+  </article>
+
+  <article class="panel">
+    <div class="section-head">
+      <div>
+        <h3>更换分配对象</h3>
+        <p>如果当前用户不是你要处理的对象，可以在这里直接输入新的用户标识重新进入。</p>
+      </div>
+    </div>
+    <form method="post" action="/admin/users/{{ target_user_id }}/roles/page">
+      <input type="hidden" name="form_action" value="locate_user_roles">
+      <label>
+        目标用户
+        <input name="target_user" value="{{ target_lookup_value }}" placeholder="例如：12、target@example.com、20240001" required>
+      </label>
+      <p class="form-hint">若纯数字同时可能是用户 ID 和学号，请使用 `id:` 或 `student:` 前缀重新输入。</p>
+      <div class="actions"><button type="submit">切换到该用户</button></div>
+    </form>
+  </article>
+
+  <section class="split-grid">
+    <article class="panel">
+      <div class="section-head">
+        <div>
+          <h3>当前角色</h3>
+          <p>这里展示该用户现在已经拥有的角色，便于在调整前先做一次确认。</p>
+        </div>
+      </div>
+      <div class="reference-list">{{{ current_roles_html }}}</div>
+    </article>
+
+    <article class="panel">
+      <div class="section-head">
+        <div>
+          <h3>调整角色</h3>
+          <p>勾选后保存，系统会按你提交的结果整体替换该用户的角色集合。</p>
+        </div>
+      </div>
+      {{{ role_assignment_panel_html }}}
+    </article>
+  </section>
+</section>
