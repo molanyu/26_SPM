@@ -287,3 +287,23 @@ app/modules/identity/api/admin_rbac.py
 - 由于当前仓库尚无完整项目骨架，本轮同步创建了仅支撑 `identity` 的最小运行时骨架
 - 管理员会话当前采用进程内服务端会话存储，适合作为第一版实现；后续若进入多实例部署，可替换为持久化会话存储
 - 为便于本地开发与测试，默认数据库 URL 允许使用 SQLite；生产部署仍应按技术选型切换到 PostgreSQL
+
+## 14. Spec 增补（2026-04-29）
+
+本轮补入“院系最小管理”能力，目标是让管理端可自助准备院系基础数据，并保持 `Department` 仍归属 `identity` 模块。
+
+范围固定如下：
+
+- `DepartmentService` 提供公开 service 入口：列出全部院系、创建院系、启用院系、停用院系。
+- 创建院系必须填写 `name`、`code` 和 `is_active`。
+- `name` 与 `code` 必须保持唯一；重复名称或编码必须返回受控冲突错误，不允许 500。
+- 院系停用通过 `is_active=false` 实现，不做物理删除。
+- 创建用户和创建自习室仍只能读取启用院系。
+- 院系管理写操作需要独立权限 `identity.departments.write`。
+- 旧库必须通过受控 Alembic migration 补齐 `identity.departments.write` 权限定义；如果 `system_admin` 角色存在，只补缺失绑定，不修改角色启停状态或其他既有配置。
+
+不包含以下内容：
+
+- 院系列表之外的复杂组织架构。
+- 院系树、批量导入、物理删除。
+- 放宽 bootstrap 对已有角色和管理员账号的 create-only 边界。

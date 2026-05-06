@@ -21,12 +21,20 @@
     <button class="button-primary" loading="{{loading}}" bindtap="submitQuery">发送查询</button>
   </view>
 
-  <view class="card" wx:if="{{response}}">
-    <view class="section-title">查询结果</view>
-    <view class="result-box">
-      <view class="item-meta">意图：{{responseIntent}}</view>
-      <view class="item-meta">类型：{{response.result_type}}</view>
-      <view class="item-meta">{{responseText}}</view>
+  <view class="card" wx:if="{{resultView}}">
+    <view class="section-title">{{resultView.title}}</view>
+    <view wx:if="{{resultView.kind === 'error'}}" class="assistant-state error-state">
+      <view>{{resultView.message}}</view>
+    </view>
+    <view wx:elif="{{resultView.kind === 'empty'}}" class="assistant-state empty-state">
+      <view>{{resultView.message}}</view>
+    </view>
+    <view wx:else class="assistant-list">
+      <view wx:for="{{resultView.items}}" wx:key="id" class="assistant-result-card">
+        <view class="item-title">{{item.title}}</view>
+        <view class="item-meta">{{item.subtitle}}</view>
+        <view class="item-meta">{{item.meta}}</view>
+      </view>
     </view>
   </view>
 </view>

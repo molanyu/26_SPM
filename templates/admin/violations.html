@@ -3,12 +3,13 @@
     <div class="section-head">
       <div>
         <h3>筛选条件</h3>
-        <p>支持按用户、自习室、日期范围和分页参数查询违约记录。</p>
+        <p>默认显示全部记录；用户 ID、学生学号、自习室和日期范围都可以单独筛选。</p>
       </div>
     </div>
     <form method="get" action="/admin/violations">
       <div class="fields">
         <label>用户 ID<input name="user_id" value="{{ filter_user_id }}"></label>
+        <label>学生学号<input name="student_no" value="{{ filter_student_no }}"></label>
         <label>自习室 ID<input name="room_id" value="{{ filter_room_id }}"></label>
         <label>开始日期<input type="date" name="date_from" value="{{ filter_date_from }}" placeholder="2026-04-17"></label>
         <label>结束日期<input type="date" name="date_to" value="{{ filter_date_to }}" placeholder="2026-04-17"></label>

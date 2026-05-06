@@ -2,12 +2,17 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, time
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from app.core.database import SessionLocal
+from app.core.errors import BadRequestError
 from app.modules.checkin.models.checkin_record import CheckinRecord
+from app.modules.checkin.schemas.checkin import StudentCodeCheckinRequest
+from app.modules.checkin.services.checkin_service import CheckinService
 from app.modules.checkin.services.code_service import CodeService
+from app.modules.identity.models.user import User
 from app.modules.reservation.models.reservation import (
     RESERVATION_SOURCE_STUDENT,
     RESERVATION_STATUS_BOOKED,
@@ -121,9 +126,8 @@ def test_student_can_check_in_with_dynamic_code(client: TestClient, seed_data: d
     )
     with SessionLocal() as session:
         code_service = CodeService(session, settings=client.app.state.settings)
-        code = code_service.ensure_daily_code(
+        code = code_service.get_current_dynamic_code(
             context["room_id"],
-            code_date=context["reservation_start"].date(),
             now=context["now"],
         )
 
@@ -153,7 +157,6 @@ def test_student_can_check_in_with_qrcode(client: TestClient, seed_data: dict):
         code_service = CodeService(session, settings=client.app.state.settings)
         token = code_service.generate_qrcode_token(
             room_id=context["room_id"],
-            code_date=context["reservation_start"].date(),
             now=context["now"],
         )
 
@@ -177,14 +180,6 @@ def test_wrong_dynamic_code_is_rejected(client: TestClient, seed_data: dict):
         student_no=seed_data["credentials"]["student_no"],
         password=seed_data["credentials"]["student_password"],
     )
-    with SessionLocal() as session:
-        code_service = CodeService(session, settings=client.app.state.settings)
-        code_service.ensure_daily_code(
-            context["room_id"],
-            code_date=context["reservation_start"].date(),
-            now=context["now"],
-        )
-
     response = client.post(
         "/student/checkins/code",
         headers=headers,
@@ -206,15 +201,6 @@ def test_non_owner_or_invalid_status_reservations_cannot_check_in(client: TestCl
     cancelled_context = _seed_checkin_context(seed_data, reservation_status=RESERVATION_STATUS_CANCELLED)
     checked_in_context = _seed_checkin_context(seed_data, reservation_status=RESERVATION_STATUS_CHECKED_IN)
     expired_context = _seed_checkin_context(seed_data, reservation_status=RESERVATION_STATUS_EXPIRED)
-
-    with SessionLocal() as session:
-        code_service = CodeService(session, settings=client.app.state.settings)
-        for context in [non_owner_context, cancelled_context, checked_in_context, expired_context]:
-            code_service.ensure_daily_code(
-                context["room_id"],
-                code_date=context["reservation_start"].date(),
-                now=context["now"],
-            )
 
     non_owner_response = client.post(
         "/student/checkins/code",
@@ -255,9 +241,8 @@ def test_student_cannot_repeat_successful_checkin(client: TestClient, seed_data:
     )
     with SessionLocal() as session:
         code_service = CodeService(session, settings=client.app.state.settings)
-        code = code_service.ensure_daily_code(
+        code = code_service.get_current_dynamic_code(
             context["room_id"],
-            code_date=context["reservation_start"].date(),
             now=context["now"],
         )
 
@@ -295,9 +280,8 @@ def test_checkin_after_grace_window_is_rejected(client: TestClient, seed_data: d
     )
     with SessionLocal() as session:
         code_service = CodeService(session, settings=client.app.state.settings)
-        code = code_service.ensure_daily_code(
+        code = code_service.get_current_dynamic_code(
             context["room_id"],
-            code_date=context["reservation_start"].date(),
             now=context["now"],
         )
 
@@ -323,7 +307,6 @@ def test_qrcode_must_match_reservation_room(client: TestClient, seed_data: dict)
         code_service = CodeService(session, settings=client.app.state.settings)
         token = code_service.generate_qrcode_token(
             room_id=context["second_room_id"],
-            code_date=context["reservation_start"].date(),
             now=context["now"],
         )
 
@@ -335,3 +318,24 @@ def test_qrcode_must_match_reservation_room(client: TestClient, seed_data: dict)
 
     assert response.status_code == 400
     assert response.json()["code"] == "invalid_qrcode"
+
+
+def test_expired_dynamic_code_window_is_rejected(client: TestClient, seed_data: dict):
+    context = _seed_checkin_context(seed_data)
+
+    with SessionLocal() as session:
+        code_service = CodeService(session, settings=client.app.state.settings)
+        old_code = code_service.get_current_dynamic_code(
+            context["room_id"],
+            now=context["now"] - timedelta(minutes=5),
+        )
+        student = session.get(User, seed_data["users"]["student"])
+        assert student is not None
+        with pytest.raises(BadRequestError) as exc_info:
+            CheckinService(session, settings=client.app.state.settings).check_in_by_code(
+                student,
+                StudentCodeCheckinRequest(reservation_id=context["reservation_id"], code=old_code.code),
+                now=context["now"],
+            )
+
+    assert exc_info.value.code == "invalid_checkin_code"

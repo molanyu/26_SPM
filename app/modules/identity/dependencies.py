@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.core.database import get_db
 from app.modules.identity.services.auth_service import AdminSessionStore, AuthService
+from app.modules.identity.services.department_service import DepartmentService
 from app.modules.identity.services.permission_service import PermissionService
 from app.modules.identity.services.user_service import UserService
 
@@ -36,6 +37,10 @@ def get_auth_service(
 
 def get_permission_service(db: Session = Depends(get_db)) -> PermissionService:
     return PermissionService(db)
+
+
+def get_department_service(db: Session = Depends(get_db)) -> DepartmentService:
+    return DepartmentService(db)
 
 
 def get_user_service(db: Session = Depends(get_db)) -> UserService:

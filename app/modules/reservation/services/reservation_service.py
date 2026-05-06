@@ -164,8 +164,10 @@ class ReservationService:
     ) -> None:
         if start_time >= end_time:
             raise BadRequestError("start_time must be earlier than end_time.")
-        if not self._is_on_the_hour(start_time) or not self._is_on_the_hour(end_time):
-            raise BadRequestError("Reservation times must be submitted on whole hours.")
+        if not self._is_on_half_hour_step(start_time) or not self._is_on_half_hour_step(end_time):
+            raise BadRequestError("Reservation times must be submitted on 30-minute boundaries.")
+        if start_time <= datetime.now():
+            raise BadRequestError("Reservation start_time must be in the future.")
         if start_time.date() != end_time.date():
             raise BadRequestError("Reservation must start and end on the same day.")
         duration_hours = (end_time - start_time).total_seconds() / 3600
@@ -184,5 +186,5 @@ class ReservationService:
         if reservation.status != RESERVATION_STATUS_BOOKED:
             raise BadRequestError("Only booked reservations can be cancelled.")
 
-    def _is_on_the_hour(self, value: datetime) -> bool:
-        return value.minute == 0 and value.second == 0 and value.microsecond == 0
+    def _is_on_half_hour_step(self, value: datetime) -> bool:
+        return value.minute in {0, 30} and value.second == 0 and value.microsecond == 0

@@ -5,6 +5,7 @@ from datetime import datetime, time, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.modules.identity.models.user import User
 from app.modules.reservation.models.reservation import Reservation
 from app.modules.violation.models.violation_record import ViolationRecord
 from app.modules.violation.schemas.violation import ViolationQueryFilters
@@ -26,7 +27,7 @@ class ViolationRepository:
         self.session.flush()
         return violation_record
 
-    def list_records(self, filters: ViolationQueryFilters) -> list[tuple[ViolationRecord, int]]:
+    def list_records(self, filters: ViolationQueryFilters) -> list[tuple[ViolationRecord, int, str | None]]:
         statement = self._build_query(filters)
         paged_statement = (
             statement.order_by(ViolationRecord.occurred_at.desc(), ViolationRecord.id.desc())
@@ -40,12 +41,18 @@ class ViolationRepository:
         return int(self.session.scalar(statement) or 0)
 
     def _build_query(self, filters: ViolationQueryFilters):
-        statement = select(ViolationRecord, Reservation.room_id).join(
-            Reservation,
-            Reservation.id == ViolationRecord.reservation_id,
+        statement = (
+            select(ViolationRecord, Reservation.room_id, User.student_no)
+            .join(
+                Reservation,
+                Reservation.id == ViolationRecord.reservation_id,
+            )
+            .join(User, User.id == ViolationRecord.user_id)
         )
         if filters.user_id is not None:
             statement = statement.where(ViolationRecord.user_id == filters.user_id)
+        if filters.student_no is not None:
+            statement = statement.where(User.student_no == filters.student_no)
         if filters.room_id is not None:
             statement = statement.where(Reservation.room_id == filters.room_id)
         if filters.date_from is not None:

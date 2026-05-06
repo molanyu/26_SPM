@@ -1,0 +1,59 @@
+<section class="panel-grid" data-template="admin-checkins">
+  <article class="panel">
+    <div class="section-head">
+      <div>
+        <h3>当前动态签到码</h3>
+        <p>选择自习室后查看服务端当前 5 分钟时间片的动态码状态。</p>
+      </div>
+    </div>
+    <form method="get" action="/admin/checkins">
+      <div class="fields">
+        <label>自习室
+          <select name="room_id">{{{ room_options_html }}}</select>
+        </label>
+        <input type="hidden" name="date_from" value="{{ filter_date_from }}">
+        <input type="hidden" name="date_to" value="{{ filter_date_to }}">
+        <input type="hidden" name="page" value="{{ filter_page }}">
+        <input type="hidden" name="page_size" value="{{ filter_page_size }}">
+      </div>
+      <div class="actions"><button class="secondary" type="submit">查看当前动态码</button></div>
+    </form>
+    {{{ checkin_code_html }}}
+  </article>
+
+  <article class="panel">
+    <div class="section-head">
+      <div>
+        <h3>签到记录筛选</h3>
+        <p>按自习室和日期核对学生签到记录。</p>
+      </div>
+    </div>
+    <form method="get" action="/admin/checkins">
+      <div class="fields">
+        <label>自习室
+          <select name="room_id">{{{ room_options_html }}}</select>
+        </label>
+        <label>开始日期<input type="date" name="date_from" value="{{ filter_date_from }}"></label>
+        <label>结束日期<input type="date" name="date_to" value="{{ filter_date_to }}"></label>
+        <label>页码<input type="number" min="1" name="page" value="{{ filter_page }}"></label>
+        <label>每页条数<input type="number" min="1" name="page_size" value="{{ filter_page_size }}"></label>
+      </div>
+      <div class="actions"><button class="secondary" type="submit">查询签到记录</button></div>
+    </form>
+  </article>
+
+  <article class="panel panel-wide">
+    <div class="section-head">
+      <div>
+        <h3>签到记录</h3>
+        <p class="muted">共 {{ checkin_records_total }} 条记录</p>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>记录 ID</th><th>预约</th><th>学生</th><th>自习室</th><th>座位</th><th>方式</th><th>签到时间</th></tr></thead>
+        <tbody>{{{ checkin_record_rows_html }}}</tbody>
+      </table>
+    </div>
+  </article>
+</section>

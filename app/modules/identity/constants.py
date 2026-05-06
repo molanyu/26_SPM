@@ -6,6 +6,7 @@ IDENTITY_ROLES_WRITE = "identity.roles.write"
 IDENTITY_PERMISSIONS_READ = "identity.permissions.read"
 IDENTITY_USERS_WRITE = "identity.users.write"
 IDENTITY_USERS_ROLES_WRITE = "identity.users.roles.write"
+IDENTITY_DEPARTMENTS_WRITE = "identity.departments.write"
 SYSTEM_ADMIN_ROLE_CODE = "system_admin"
 SYSTEM_ADMIN_ROLE_NAME = "System Admin"
 
@@ -40,6 +41,11 @@ BASE_PERMISSION_DEFINITIONS = [
         "code": IDENTITY_USERS_ROLES_WRITE,
         "description": "允许调整指定用户的角色集合。",
     },
+    {
+        "name": "维护院系",
+        "code": IDENTITY_DEPARTMENTS_WRITE,
+        "description": "允许查看、新增、启用和停用院系。",
+    },
 ]
 
 DEFAULT_PERMISSION_CODES = [definition["code"] for definition in BASE_PERMISSION_DEFINITIONS]
@@ -61,6 +67,11 @@ MENU_DEFINITIONS = [
         "required_permissions": [ADMIN_PORTAL_ACCESS],
     },
     {
+        "code": "checkin.records",
+        "label": "动态签到码",
+        "required_permissions": [ADMIN_PORTAL_ACCESS],
+    },
+    {
         "code": "identity.roles",
         "label": "角色管理",
         "required_permissions": [IDENTITY_ROLES_READ],
@@ -69,6 +80,11 @@ MENU_DEFINITIONS = [
         "code": "identity.users.create",
         "label": "创建用户",
         "required_permissions": [IDENTITY_USERS_WRITE],
+    },
+    {
+        "code": "identity.departments",
+        "label": "院系管理",
+        "required_permissions": [IDENTITY_DEPARTMENTS_WRITE],
     },
     {
         "code": "identity.permissions",
@@ -89,5 +105,10 @@ MENU_DEFINITIONS = [
         "code": "violation.records",
         "label": "违约记录",
         "required_permissions": [IDENTITY_PERMISSIONS_READ],
+    },
+    {
+        "code": "notification.logs",
+        "label": "通知日志",
+        "required_permissions": [ADMIN_PORTAL_ACCESS],
     },
 ]

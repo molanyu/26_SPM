@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
-import secrets
+from datetime import datetime, timedelta
+import hashlib
+import hmac
 
 import jwt
 
@@ -10,48 +11,51 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, load_settings
 from app.core.errors import BadRequestError
-from app.modules.checkin.models.checkin_code import CheckinCode
-from app.modules.checkin.repositories.checkin_code_repository import CheckinCodeRepository
 from app.modules.resource.services.checkin_room_service import CheckinRoomService
+
+CHECKIN_CODE_WINDOW_MINUTES = 5
+
+
+@dataclass(slots=True)
+class DynamicCheckinCode:
+    room_id: int
+    code: str
+    time_slice_start: datetime
+    expires_at: datetime
+    remaining_seconds: int
 
 
 @dataclass(slots=True)
 class QRCodePayload:
     room_id: int
-    code_date: date
+    time_slice_start: datetime
     code: str
+    expires_at: datetime
 
 
 class CodeService:
     def __init__(self, session: Session, settings: Settings | None = None) -> None:
         self.session = session
         self.settings = settings or load_settings()
-        self.repository = CheckinCodeRepository(session)
         self.room_service = CheckinRoomService(session)
 
-    def ensure_daily_code(self, room_id: int, *, code_date: date, now: datetime | None = None) -> CheckinCode:
+    def get_current_dynamic_code(self, room_id: int, *, now: datetime | None = None) -> DynamicCheckinCode:
         self.room_service.get_active_room_snapshot(room_id)
-        existing = self.repository.get_by_room_and_date(room_id, code_date)
-        if existing is not None:
-            return existing
-
-        created_at = now or datetime.now()
-        expires_at = datetime.combine(code_date + timedelta(days=1), time.min)
-        checkin_code = CheckinCode(
+        resolved_now = now or datetime.now()
+        time_slice_start = self._time_slice_start(resolved_now)
+        expires_at = time_slice_start + timedelta(minutes=CHECKIN_CODE_WINDOW_MINUTES)
+        remaining_seconds = max(0, int((expires_at - resolved_now).total_seconds()))
+        return DynamicCheckinCode(
             room_id=room_id,
-            code=self._generate_code(),
-            code_date=code_date,
+            code=self._derive_code(room_id, time_slice_start),
+            time_slice_start=time_slice_start,
             expires_at=expires_at,
-            created_at=created_at,
+            remaining_seconds=remaining_seconds,
         )
-        self.repository.add(checkin_code)
-        self.session.commit()
-        self.session.refresh(checkin_code)
-        return checkin_code
 
-    def ensure_daily_codes(self, *, code_date: date, now: datetime | None = None) -> list[CheckinCode]:
+    def get_current_dynamic_codes(self, *, now: datetime | None = None) -> list[DynamicCheckinCode]:
         return [
-            self.ensure_daily_code(room.room_id, code_date=code_date, now=now)
+            self.get_current_dynamic_code(room.room_id, now=now)
             for room in self.room_service.list_active_room_snapshots()
         ]
 
@@ -60,25 +64,28 @@ class CodeService:
         *,
         room_id: int,
         submitted_code: str,
-        code_date: date,
         now: datetime | None = None,
-    ) -> CheckinCode:
-        record = self.repository.get_by_room_and_date(room_id, code_date)
-        now = now or datetime.now()
-        if record is None or record.expires_at <= now or record.code != submitted_code.strip():
+    ) -> DynamicCheckinCode:
+        current_code = self.get_current_dynamic_code(room_id, now=now)
+        if not hmac.compare_digest(current_code.code, submitted_code.strip()):
             raise BadRequestError("Invalid or expired check-in code.", code="invalid_checkin_code")
-        return record
+        return current_code
 
-    def generate_qrcode_token(self, *, room_id: int, code_date: date, now: datetime | None = None) -> str:
-        record = self.ensure_daily_code(room_id, code_date=code_date, now=now)
+    def generate_qrcode_token(
+        self,
+        *,
+        room_id: int,
+        now: datetime | None = None,
+    ) -> str:
+        current_code = self.get_current_dynamic_code(room_id, now=now)
         issued_at = int((now or datetime.now()).timestamp())
         payload = {
             "kind": "checkin_qrcode",
             "room_id": room_id,
-            "code_date": code_date.isoformat(),
-            "code": record.code,
+            "time_slice_start": current_code.time_slice_start.isoformat(),
+            "code": current_code.code,
             "iat": issued_at,
-            "exp": int(record.expires_at.timestamp()),
+            "exp": int(current_code.expires_at.timestamp()),
         }
         return jwt.encode(payload, self.settings.jwt_secret_key, algorithm=self.settings.jwt_algorithm)
 
@@ -87,18 +94,20 @@ class CodeService:
         *,
         room_id: int,
         token: str,
-        code_date: date,
         now: datetime | None = None,
-    ) -> CheckinCode:
+    ) -> DynamicCheckinCode:
         payload = self._decode_qrcode_token(token)
-        if payload.room_id != room_id or payload.code_date != code_date:
+        resolved_now = now or datetime.now()
+        if payload.room_id != room_id:
             raise BadRequestError("QR code does not match the reservation room.", code="invalid_qrcode")
-        return self.validate_dynamic_code(
-            room_id=room_id,
-            submitted_code=payload.code,
-            code_date=payload.code_date,
-            now=now,
-        )
+        if payload.expires_at <= resolved_now:
+            raise BadRequestError("Invalid or expired QR code.", code="invalid_qrcode")
+        current_code = self.get_current_dynamic_code(room_id, now=resolved_now)
+        if payload.time_slice_start != current_code.time_slice_start:
+            raise BadRequestError("Invalid or expired QR code.", code="invalid_qrcode")
+        if not hmac.compare_digest(payload.code, current_code.code):
+            raise BadRequestError("Invalid or expired QR code.", code="invalid_qrcode")
+        return current_code
 
     def _decode_qrcode_token(self, token: str) -> QRCodePayload:
         try:
@@ -106,6 +115,7 @@ class CodeService:
                 token,
                 self.settings.jwt_secret_key,
                 algorithms=[self.settings.jwt_algorithm],
+                options={"verify_exp": False},
             )
         except jwt.InvalidTokenError as exc:
             raise BadRequestError("Invalid or expired QR code.", code="invalid_qrcode") from exc
@@ -114,11 +124,22 @@ class CodeService:
         try:
             return QRCodePayload(
                 room_id=int(payload["room_id"]),
-                code_date=date.fromisoformat(str(payload["code_date"])),
+                time_slice_start=datetime.fromisoformat(str(payload["time_slice_start"])),
                 code=str(payload["code"]),
+                expires_at=datetime.fromtimestamp(int(payload["exp"])),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise BadRequestError("Invalid or expired QR code.", code="invalid_qrcode") from exc
 
-    def _generate_code(self) -> str:
-        return f"{secrets.randbelow(1_000_000):06d}"
+    def _time_slice_start(self, value: datetime) -> datetime:
+        slice_minute = (value.minute // CHECKIN_CODE_WINDOW_MINUTES) * CHECKIN_CODE_WINDOW_MINUTES
+        return value.replace(minute=slice_minute, second=0, microsecond=0)
+
+    def _derive_code(self, room_id: int, time_slice_start: datetime) -> str:
+        message = f"checkin:{room_id}:{time_slice_start.isoformat(timespec='minutes')}".encode("utf-8")
+        digest = hmac.new(
+            self.settings.jwt_secret_key.encode("utf-8"),
+            message,
+            hashlib.sha256,
+        ).digest()
+        return f"{int.from_bytes(digest[:8], 'big') % 1_000_000:06d}"

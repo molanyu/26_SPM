@@ -8,15 +8,18 @@ from sqlalchemy.orm import Session
 
 from app.admin_portal.services.menu_service import AdminPortalMenuService
 from app.core.errors import AppError
+from app.modules.checkin.services.admin_checkin_service import AdminCheckinService
 from app.modules.identity.constants import IDENTITY_USERS_ROLES_WRITE
 from app.modules.identity.models.role import Role
 from app.modules.identity.models.user import User
+from app.modules.identity.schemas.department import DepartmentRead as ManagedDepartmentRead
 from app.modules.identity.schemas.permission import PermissionRead
 from app.modules.identity.schemas.role import RoleRead
 from app.modules.identity.schemas.user import DepartmentRead, UserCreateResult
 from app.modules.identity.services.department_service import DepartmentService
 from app.modules.identity.services.permission_service import PermissionService
 from app.modules.identity.services.user_service import UserService
+from app.modules.notification.services.admin_notification_service import AdminNotificationService
 from app.modules.reservation.schemas.reservation import AdminReservationQueryFilters
 from app.modules.reservation.services.query_service import ReservationQueryService
 from app.modules.system_config.models.system_config import SystemConfig
@@ -54,6 +57,10 @@ _PERMISSION_UI_COPY = {
         "name": "分配用户角色",
         "description": "允许替换指定用户的角色集合。",
     },
+    "identity.departments.write": {
+        "name": "维护院系",
+        "description": "允许查看、新增、启用和停用院系。",
+    },
 }
 
 
@@ -71,6 +78,8 @@ class AdminPageService:
         self.seat_service = SeatService(session)
         self.config_service = ConfigService(session)
         self.reservation_query_service = ReservationQueryService(session)
+        self.admin_checkin_service = AdminCheckinService(session)
+        self.admin_notification_service = AdminNotificationService(session)
         self.query_service = QueryService(session)
         self.statistics_service = StatisticsService(session)
         self.menu_service = AdminPortalMenuService()
@@ -141,6 +150,18 @@ class AdminPageService:
             "page_size": len(permissions),
         }
 
+    def list_departments_payload(self) -> dict[str, object]:
+        departments = [
+            ManagedDepartmentRead.model_validate(department).model_dump()
+            for department in self.department_service.list_departments()
+        ]
+        return {
+            "items": departments,
+            "total": len(departments),
+            "page": 1,
+            "page_size": len(departments),
+        }
+
     def get_roles_context(
         self,
         request: Request,
@@ -189,6 +210,39 @@ class AdminPageService:
             active_role_count=sum(1 for role in roles if role["is_active"]),
             inactive_role_count=sum(1 for role in roles if not role["is_active"]),
             permission_count=len(permissions),
+        )
+
+    def get_departments_context(
+        self,
+        request: Request,
+        current_admin: User,
+        *,
+        error_message: str | None = None,
+        success_message: str | None = None,
+        create_form: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        departments = self._decorate_departments(self.list_departments_payload()["items"])
+        normalized_form = self._normalize_department_form(
+            create_form
+            or {
+                "name": "",
+                "code": "",
+                "is_active": True,
+            }
+        )
+        return self.build_base_context(
+            request,
+            current_admin,
+            page_title="院系管理",
+            page_key="identity.departments",
+            page_intro="维护最小院系基础数据，供用户创建和院系专属自习室选择使用。",
+            error_message=error_message,
+            success_message=success_message,
+            departments=departments,
+            create_form=normalized_form,
+            department_count=len(departments),
+            active_department_count=sum(1 for department in departments if department["is_active"]),
+            inactive_department_count=sum(1 for department in departments if not department["is_active"]),
         )
 
     def get_user_roles_context(
@@ -447,6 +501,7 @@ class AdminPageService:
         current_admin: User,
         *,
         user_id: int | None = None,
+        student_no: str | None = None,
         room_id: int | None = None,
         seat_id: int | None = None,
         status: str | None = None,
@@ -479,6 +534,101 @@ class AdminPageService:
             reservations=payload["items"],
             total=payload["total"],
             filters=filters.model_dump(),
+        )
+
+    def get_checkins_context(
+        self,
+        request: Request,
+        current_admin: User,
+        *,
+        room_id: int | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        page: int = 1,
+        page_size: int = 20,
+        error_message: str | None = None,
+        success_message: str | None = None,
+    ) -> dict[str, object]:
+        resolved_date_from = date_from or date.today()
+        resolved_date_to = date_to or resolved_date_from
+        rooms = self.admin_checkin_service.list_active_rooms()
+        current_code = None
+        if room_id is not None:
+            code = self.admin_checkin_service.get_current_dynamic_code(room_id)
+            current_code = {
+                "room_id": code.room_id,
+                "code": code.code,
+                "time_slice_start": code.time_slice_start,
+                "expires_at": code.expires_at,
+                "remaining_seconds": code.remaining_seconds,
+            }
+        records = self.admin_checkin_service.list_records(
+            room_id=room_id,
+            date_from=resolved_date_from,
+            date_to=resolved_date_to,
+            page=page,
+            page_size=page_size,
+        )
+        return self.build_base_context(
+            request,
+            current_admin,
+            page_title="动态签到码",
+            page_key="checkin.records",
+            page_intro="查看指定自习室当前 5 分钟动态签到码状态、有效至时间和学生签到记录。",
+            error_message=error_message,
+            success_message=success_message,
+            rooms=rooms,
+            selected_room_id=room_id,
+            date_from=resolved_date_from,
+            date_to=resolved_date_to,
+            page=page,
+            page_size=page_size,
+            current_code=current_code,
+            checkin_records=records.items,
+            checkin_total=records.total,
+        )
+
+    def get_notifications_context(
+        self,
+        request: Request,
+        current_admin: User,
+        *,
+        reservation_id: int | None = None,
+        notification_type: str | None = None,
+        status: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+        error_message: str | None = None,
+        success_message: str | None = None,
+        trigger_result: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        logs = self.admin_notification_service.list_logs(
+            reservation_id=reservation_id,
+            notification_type=notification_type,
+            status=status,
+            page=page,
+            page_size=page_size,
+        )
+        return self.build_base_context(
+            request,
+            current_admin,
+            page_title="通知日志",
+            page_key="notification.logs",
+            page_intro="查看通知发送记录，并按手动验收时间线触发已有内部通知任务。",
+            error_message=error_message,
+            success_message=success_message,
+            notification_default_channel=self.admin_notification_service.settings.notification_default_channel,
+            smtp_host=self.admin_notification_service.settings.smtp_host or "",
+            logs=logs.items,
+            total=logs.total,
+            filters={
+                "reservation_id": reservation_id,
+                "notification_type": notification_type,
+                "status": status,
+                "page": page,
+                "page_size": page_size,
+            },
+            trigger_result=trigger_result,
         )
 
     def get_statistics_context(
@@ -527,6 +677,7 @@ class AdminPageService:
         current_admin: User,
         *,
         user_id: int | None = None,
+        student_no: str | None = None,
         room_id: int | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
@@ -537,6 +688,7 @@ class AdminPageService:
     ) -> dict[str, object]:
         filters = ViolationQueryFilters(
             user_id=user_id,
+            student_no=student_no,
             room_id=room_id,
             date_from=date_from,
             date_to=date_to,
@@ -549,7 +701,7 @@ class AdminPageService:
             current_admin,
             page_title="违约记录查询",
             page_key="violation.records",
-            page_intro="按用户、自习室和日期范围查询违约记录，时间范围错误会直接提示。",
+            page_intro="按用户、学号、自习室和日期范围查询违约记录，所有筛选条件均可单独使用。",
             error_message=error_message,
             success_message=success_message,
             violations=payload["items"],
@@ -627,6 +779,18 @@ class AdminPageService:
                 }
             )
         return decorated
+
+    def _decorate_departments(self, departments: list[dict[str, object]]) -> list[dict[str, object]]:
+        return [
+            {
+                **department,
+                "status_label": "启用中" if department["is_active"] else "已停用",
+                "action": "deactivate" if department["is_active"] else "activate",
+                "action_label": "停用院系" if department["is_active"] else "启用院系",
+                "action_button_class": "danger" if department["is_active"] else "secondary",
+            }
+            for department in departments
+        ]
 
     def _build_target_user_summary(self, user: User | None, user_id: int) -> dict[str, object]:
         if user is None:
@@ -743,6 +907,13 @@ class AdminPageService:
             "description": str(role_form.get("description", "")),
             "is_active": bool(role_form.get("is_active", True)),
             "permission_ids": sorted(set(permission_ids)),
+        }
+
+    def _normalize_department_form(self, create_form: dict[str, object]) -> dict[str, object]:
+        return {
+            "name": str(create_form.get("name", "")),
+            "code": str(create_form.get("code", "")),
+            "is_active": bool(create_form.get("is_active", True)),
         }
 
     def _normalize_room_form(self, create_form: dict[str, object]) -> dict[str, object]:

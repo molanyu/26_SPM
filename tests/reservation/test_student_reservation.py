@@ -119,9 +119,15 @@ def _seed_reservation_resources(seed_data: dict) -> dict[str, int]:
         }
 
 
-def _future_slot(*, days: int = 1, start_hour: int = 10, duration_hours: int = 2) -> tuple[datetime, datetime]:
+def _future_slot(
+    *,
+    days: int = 1,
+    start_hour: int = 10,
+    start_minute: int = 0,
+    duration_hours: int = 2,
+) -> tuple[datetime, datetime]:
     base = datetime.now().replace(minute=0, second=0, microsecond=0) + timedelta(days=days)
-    start = base.replace(hour=start_hour)
+    start = base.replace(hour=start_hour, minute=start_minute)
     end = start + timedelta(hours=duration_hours)
     return start, end
 
@@ -178,7 +184,32 @@ def test_student_can_create_reservation(client: TestClient, seed_data: dict):
     assert payload["data"]["room_id"] == resource_ids["cs_room"]
 
 
-def test_non_whole_hour_reservation_is_rejected(client: TestClient, seed_data: dict):
+def test_student_can_create_half_hour_reservation(client: TestClient, seed_data: dict):
+    resource_ids = _seed_reservation_resources(seed_data)
+    headers = _login_student(
+        client,
+        student_no=seed_data["credentials"]["student_no"],
+        password=seed_data["credentials"]["student_password"],
+    )
+    start_time, end_time = _future_slot(start_hour=9, start_minute=30, duration_hours=1)
+
+    response = client.post(
+        "/student/reservations",
+        headers=headers,
+        json={
+            "seat_id": resource_ids["cs_seat"],
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["start_time"] == start_time.isoformat()
+    assert payload["end_time"] == end_time.isoformat()
+
+
+def test_non_half_hour_reservation_is_rejected(client: TestClient, seed_data: dict):
     resource_ids = _seed_reservation_resources(seed_data)
     headers = _login_student(
         client,
@@ -186,7 +217,31 @@ def test_non_whole_hour_reservation_is_rejected(client: TestClient, seed_data: d
         password=seed_data["credentials"]["student_password"],
     )
     start_time, end_time = _future_slot(start_hour=10, duration_hours=2)
-    start_time = start_time.replace(minute=30)
+    start_time = start_time.replace(minute=15)
+
+    response = client.post(
+        "/student/reservations",
+        headers=headers,
+        json={
+            "seat_id": resource_ids["cs_seat"],
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "bad_request"
+
+
+def test_past_reservation_is_rejected(client: TestClient, seed_data: dict):
+    resource_ids = _seed_reservation_resources(seed_data)
+    headers = _login_student(
+        client,
+        student_no=seed_data["credentials"]["student_no"],
+        password=seed_data["credentials"]["student_password"],
+    )
+    start_time = datetime.now().replace(minute=0, second=0, microsecond=0) - timedelta(hours=2)
+    end_time = start_time + timedelta(hours=1)
 
     response = client.post(
         "/student/reservations",

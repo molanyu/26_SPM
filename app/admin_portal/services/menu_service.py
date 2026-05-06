@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from app.modules.identity.constants import (
     ADMIN_PORTAL_ACCESS,
+    IDENTITY_DEPARTMENTS_WRITE,
     IDENTITY_PERMISSIONS_READ,
     IDENTITY_ROLES_READ,
     IDENTITY_USERS_ROLES_WRITE,
@@ -27,12 +28,15 @@ class AdminPortalMenuService:
         "admin.dashboard": "/admin",
         "reservation.records": "/admin/reservations/records",
         "reservation.actions": "/admin/reservations/actions",
+        "checkin.records": "/admin/checkins",
         "identity.roles": "/admin/roles",
         "identity.users.create": "/admin/users/new",
+        "identity.departments": "/admin/departments",
         "identity.permissions": "/admin/roles#permission-reference",
         "identity.user_roles": "/admin/roles#user-role-entry",
         "statistics.usage": "/admin/statistics",
         "violation.records": "/admin/violations",
+        "notification.logs": "/admin/notifications",
     }
 
     _SHORTCUTS = (
@@ -49,6 +53,13 @@ class AdminPortalMenuService:
             description="创建单个学生账号或管理员账号，并继续处理后续授权。",
             href="/admin/users/new",
             required_permissions=(IDENTITY_USERS_WRITE,),
+        ),
+        ShortcutDefinition(
+            code="identity.departments",
+            label="院系管理",
+            description="查看、新增、启用和停用院系，维护用户与自习室的基础归属数据。",
+            href="/admin/departments",
+            required_permissions=(IDENTITY_DEPARTMENTS_WRITE,),
         ),
         ShortcutDefinition(
             code="identity.user_roles",
@@ -86,6 +97,13 @@ class AdminPortalMenuService:
             required_permissions=(ADMIN_PORTAL_ACCESS,),
         ),
         ShortcutDefinition(
+            code="checkin.records",
+            label="动态签到码",
+            description="查看当前动态签到码状态，并核对学生签到记录。",
+            href="/admin/checkins",
+            required_permissions=(ADMIN_PORTAL_ACCESS,),
+        ),
+        ShortcutDefinition(
             code="statistics.usage",
             label="统计查询",
             description="查看使用率与违约率统计结果。",
@@ -105,6 +123,13 @@ class AdminPortalMenuService:
             description="按条件查询违约记录。",
             href="/admin/violations",
             required_permissions=(IDENTITY_PERMISSIONS_READ,),
+        ),
+        ShortcutDefinition(
+            code="notification.logs",
+            label="通知日志",
+            description="查看通知日志，并按验收时间线手动触发已有通知任务。",
+            href="/admin/notifications",
+            required_permissions=(ADMIN_PORTAL_ACCESS,),
         ),
     )
 

@@ -28,6 +28,7 @@ class QueryService:
             ViolationRecordRead(
                 violation_id=record.id,
                 user_id=record.user_id,
+                student_no=student_no,
                 reservation_id=record.reservation_id,
                 room_id=room_id,
                 violation_type=record.violation_type,
@@ -35,7 +36,7 @@ class QueryService:
                 remark=record.remark,
                 created_at=record.created_at,
             )
-            for record, room_id in rows
+            for record, room_id, student_no in rows
         ]
         return ViolationListResult(
             items=items,

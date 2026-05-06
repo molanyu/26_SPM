@@ -3,15 +3,22 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 
 from app.modules.identity.constants import (
+    IDENTITY_DEPARTMENTS_WRITE,
     IDENTITY_PERMISSIONS_READ,
     IDENTITY_ROLES_READ,
     IDENTITY_ROLES_WRITE,
     IDENTITY_USERS_WRITE,
     IDENTITY_USERS_ROLES_WRITE,
 )
-from app.modules.identity.dependencies import get_permission_service, get_user_service, require_admin_permission
+from app.modules.identity.dependencies import (
+    get_department_service,
+    get_permission_service,
+    get_user_service,
+    require_admin_permission,
+)
 from app.modules.identity.models.permission import Permission
 from app.modules.identity.models.role import Role
+from app.modules.identity.schemas.department import DepartmentCreateRequest, DepartmentRead
 from app.modules.identity.schemas.permission import PermissionRead
 from app.modules.identity.schemas.role import (
     RoleCreateRequest,
@@ -20,6 +27,7 @@ from app.modules.identity.schemas.role import (
     UserRoleAssignmentRequest,
 )
 from app.modules.identity.schemas.user import UserCreateRequest, UserCreateResult
+from app.modules.identity.services.department_service import DepartmentService
 from app.modules.identity.services.permission_service import PermissionService
 from app.modules.identity.services.user_service import UserService
 
@@ -47,6 +55,10 @@ def _build_role_read(role: Role) -> RoleRead:
 
 def _build_user_result(user: UserCreateResult) -> dict[str, object]:
     return user.model_dump()
+
+
+def _build_department_result(department) -> dict[str, object]:
+    return DepartmentRead.model_validate(department).model_dump()
 
 
 @router.get(
@@ -123,6 +135,68 @@ def list_permissions(permission_service: PermissionService = Depends(get_permiss
         "total": len(permissions),
         "page": 1,
         "page_size": len(permissions),
+    }
+
+
+@router.get(
+    "/departments",
+    dependencies=[Depends(require_admin_permission(IDENTITY_DEPARTMENTS_WRITE))],
+)
+def list_departments(department_service: DepartmentService = Depends(get_department_service)):
+    departments = [_build_department_result(department) for department in department_service.list_departments()]
+    return {
+        "items": departments,
+        "total": len(departments),
+        "page": 1,
+        "page_size": len(departments),
+    }
+
+
+@router.post(
+    "/departments",
+    dependencies=[Depends(require_admin_permission(IDENTITY_DEPARTMENTS_WRITE))],
+)
+def create_department(
+    payload: DepartmentCreateRequest,
+    department_service: DepartmentService = Depends(get_department_service),
+):
+    department = department_service.create_department(payload)
+    return {
+        "success": True,
+        "message": "院系创建成功。",
+        "data": _build_department_result(department),
+    }
+
+
+@router.post(
+    "/departments/{department_id}/activate",
+    dependencies=[Depends(require_admin_permission(IDENTITY_DEPARTMENTS_WRITE))],
+)
+def activate_department(
+    department_id: int,
+    department_service: DepartmentService = Depends(get_department_service),
+):
+    department = department_service.activate_department(department_id)
+    return {
+        "success": True,
+        "message": "院系已启用。",
+        "data": _build_department_result(department),
+    }
+
+
+@router.post(
+    "/departments/{department_id}/deactivate",
+    dependencies=[Depends(require_admin_permission(IDENTITY_DEPARTMENTS_WRITE))],
+)
+def deactivate_department(
+    department_id: int,
+    department_service: DepartmentService = Depends(get_department_service),
+):
+    department = department_service.deactivate_department(department_id)
+    return {
+        "success": True,
+        "message": "院系已停用。",
+        "data": _build_department_result(department),
     }
 
 

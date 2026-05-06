@@ -17,6 +17,7 @@ LEGACY_PERMISSION_CODES = [
     "identity.users.roles.write",
 ]
 BACKFILLED_PERMISSION_CODE = "identity.users.write"
+DEPARTMENTS_PERMISSION_CODE = "identity.departments.write"
 SYSTEM_ADMIN_ROLE_CODE = "system_admin"
 ROOT_DIR = Path(__file__).resolve().parents[2]
 
@@ -159,26 +160,27 @@ def test_upgrade_backfills_identity_users_write_for_legacy_database(
         command.upgrade(config, "head")
 
         with engine.connect() as connection:
-            permission_count = connection.execute(
-                sa.text("SELECT COUNT(*) FROM permissions WHERE code = :code"),
-                {"code": BACKFILLED_PERMISSION_CODE},
-            ).scalar_one()
-            role_permission_count = connection.execute(
-                sa.text(
-                    "SELECT COUNT(*) "
-                    "FROM role_permissions rp "
-                    "JOIN roles r ON r.id = rp.role_id "
-                    "JOIN permissions p ON p.id = rp.permission_id "
-                    "WHERE r.code = :role_code AND p.code = :permission_code"
-                ),
-                {
-                    "role_code": SYSTEM_ADMIN_ROLE_CODE,
-                    "permission_code": BACKFILLED_PERMISSION_CODE,
-                },
-            ).scalar_one()
+            for permission_code in (BACKFILLED_PERMISSION_CODE, DEPARTMENTS_PERMISSION_CODE):
+                permission_count = connection.execute(
+                    sa.text("SELECT COUNT(*) FROM permissions WHERE code = :code"),
+                    {"code": permission_code},
+                ).scalar_one()
+                role_permission_count = connection.execute(
+                    sa.text(
+                        "SELECT COUNT(*) "
+                        "FROM role_permissions rp "
+                        "JOIN roles r ON r.id = rp.role_id "
+                        "JOIN permissions p ON p.id = rp.permission_id "
+                        "WHERE r.code = :role_code AND p.code = :permission_code"
+                    ),
+                    {
+                        "role_code": SYSTEM_ADMIN_ROLE_CODE,
+                        "permission_code": permission_code,
+                    },
+                ).scalar_one()
 
-        assert permission_count == 1
-        assert role_permission_count == 1
+                assert permission_count == 1
+                assert role_permission_count == 1
     finally:
         if engine is not None:
             engine.dispose()
@@ -215,22 +217,23 @@ def test_upgrade_backfills_permission_definition_without_existing_system_admin_r
         command.upgrade(config, "head")
 
         with engine.connect() as connection:
-            permission_count = connection.execute(
-                sa.text("SELECT COUNT(*) FROM permissions WHERE code = :code"),
-                {"code": BACKFILLED_PERMISSION_CODE},
-            ).scalar_one()
-            role_permission_count = connection.execute(
-                sa.text(
-                    "SELECT COUNT(*) "
-                    "FROM role_permissions rp "
-                    "JOIN permissions p ON p.id = rp.permission_id "
-                    "WHERE p.code = :permission_code"
-                ),
-                {"permission_code": BACKFILLED_PERMISSION_CODE},
-            ).scalar_one()
+            for permission_code in (BACKFILLED_PERMISSION_CODE, DEPARTMENTS_PERMISSION_CODE):
+                permission_count = connection.execute(
+                    sa.text("SELECT COUNT(*) FROM permissions WHERE code = :code"),
+                    {"code": permission_code},
+                ).scalar_one()
+                role_permission_count = connection.execute(
+                    sa.text(
+                        "SELECT COUNT(*) "
+                        "FROM role_permissions rp "
+                        "JOIN permissions p ON p.id = rp.permission_id "
+                        "WHERE p.code = :permission_code"
+                    ),
+                    {"permission_code": permission_code},
+                ).scalar_one()
 
-        assert permission_count == 1
-        assert role_permission_count == 0
+                assert permission_count == 1
+                assert role_permission_count == 0
     finally:
         if engine is not None:
             engine.dispose()

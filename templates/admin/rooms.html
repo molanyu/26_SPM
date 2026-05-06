@@ -69,14 +69,12 @@
 </section>
 <script>
   (function () {
-    var forms = document.querySelectorAll('[data-room-form="true"]');
-    for (var index = 0; index < forms.length; index += 1) {
-      var form = forms[index];
+    function bindRoomForm(form) {
       var scope = form.querySelector('select[name="access_scope"]');
       var departmentField = form.querySelector('[data-department-field]');
       var departmentSelect = form.querySelector('select[name="department_id"]');
       if (!scope || !departmentField || !departmentSelect) {
-        continue;
+        return;
       }
       var syncDepartmentField = function () {
         var isDepartment = scope.value === 'department';
@@ -88,6 +86,11 @@
       };
       scope.addEventListener('change', syncDepartmentField);
       syncDepartmentField();
+    }
+
+    var forms = document.querySelectorAll('[data-room-form="true"]');
+    for (var index = 0; index < forms.length; index += 1) {
+      bindRoomForm(forms[index]);
     }
   }());
 </script>

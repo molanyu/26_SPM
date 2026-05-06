@@ -10,6 +10,7 @@ from app.core.security import hash_password
 from app.main import create_app
 from app.modules.identity.constants import (
     ADMIN_PORTAL_ACCESS,
+    IDENTITY_DEPARTMENTS_WRITE,
     IDENTITY_PERMISSIONS_READ,
     IDENTITY_ROLES_READ,
     IDENTITY_ROLES_WRITE,
@@ -49,6 +50,11 @@ def _seed_identity_data() -> dict[str, dict[str, int] | dict[str, str]]:
                 name="Assign User Roles",
                 code=IDENTITY_USERS_ROLES_WRITE,
                 description="Allows assigning roles to users.",
+            ),
+            Permission(
+                name="Manage Departments",
+                code=IDENTITY_DEPARTMENTS_WRITE,
+                description="Allows managing departments.",
             ),
         ]
         session.add_all(permissions)

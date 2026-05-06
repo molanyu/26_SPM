@@ -1,3 +1,32 @@
 .textarea {
   min-height: 220rpx;
 }
+
+.assistant-state {
+  padding: 24rpx;
+  border-radius: 8rpx;
+  line-height: 1.6;
+}
+
+.empty-state {
+  background: #f8fafc;
+  color: #475569;
+}
+
+.error-state {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.assistant-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.assistant-result-card {
+  padding: 24rpx;
+  border: 1rpx solid #e5e7eb;
+  border-radius: 8rpx;
+  background: #ffffff;
+}

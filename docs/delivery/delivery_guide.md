@@ -65,6 +65,10 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_postgres_acceptance.ps1 -
 
 ## 3. 容器启动
 
+华为云 Flexus 云服务器的完整已验证部署流程见：
+
+- `docs/delivery/huawei_cloud_deployment_runbook.md`
+
 ### 3.1 准备环境变量
 
 复制：

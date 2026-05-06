@@ -10,11 +10,18 @@ from sqlalchemy import select
 
 from app.core.database import SessionLocal
 from app.core.security import hash_password
+from app.modules.checkin.models.checkin_record import CheckinRecord
 from app.modules.identity.models.permission import Permission
 from app.modules.identity.models.role import Role
 from app.modules.identity.models.role_permission import RolePermission
 from app.modules.identity.models.user import User
 from app.modules.identity.models.user_role import UserRole
+from app.modules.notification.models.notification_log import (
+    NOTIFICATION_CHANNEL_MOCK,
+    NOTIFICATION_STATUS_SENT,
+    NOTIFICATION_TYPE_RESERVATION_REMINDER,
+    NotificationLog,
+)
 from app.modules.reservation.models.reservation import (
     RESERVATION_SOURCE_STUDENT,
     RESERVATION_STATUS_BOOKED,
@@ -193,6 +200,7 @@ def _seed_violation_records(seed_data: dict) -> dict[str, int]:
         session.commit()
         return {
             "user_id": seed_data["users"]["student"],
+            "student_no": seed_data["credentials"]["student_no"],
             "room_id": room.id,
             "reservation_id": reservation.id,
         }
@@ -255,13 +263,16 @@ def test_required_admin_portal_pages_render_html(client: TestClient, seed_data: 
     urls = [
         "/admin",
         "/admin/roles",
+        "/admin/departments",
         "/admin/users/new",
         f"/admin/users/{seed_data['users']['target']}/roles",
         "/admin/rooms",
         "/admin/seats",
         "/admin/system-configs",
         "/admin/reservations/actions",
+        "/admin/checkins",
         "/admin/violations",
+        "/admin/notifications",
     ]
 
     for url in urls:
@@ -299,13 +310,16 @@ def test_admin_templates_exist_and_pages_render_from_template_files(client: Test
         "layout.html",
         "home.html",
         "roles.html",
+        "departments.html",
         "user_create.html",
         "user_roles.html",
         "rooms.html",
         "seats.html",
         "system_configs.html",
         "reservation_actions.html",
+        "checkins.html",
         "violations.html",
+        "notifications.html",
     ]
     for template_name in expected_templates:
         assert (TEMPLATE_ROOT / template_name).exists()
@@ -352,6 +366,7 @@ def test_admin_home_renders_permission_filtered_navigation(client: TestClient, s
     assert 'href="/admin/rooms"' in response.text
     assert 'href="/admin/seats"' in response.text
     assert 'href="/admin/reservations/actions"' in response.text
+    assert 'href="/admin/departments"' not in response.text
     assert 'href="/admin/users/new"' not in response.text
     assert 'href="/admin/roles"' not in response.text
     assert 'href="/admin/system-configs"' not in response.text
@@ -368,6 +383,105 @@ def test_admin_home_shows_user_create_entry_for_system_admin(client: TestClient,
 
     assert response.status_code == 200
     assert 'href="/admin/users/new"' in response.text
+    assert 'href="/admin/departments"' in response.text
+    assert 'href="/admin/checkins"' in response.text
+    assert 'href="/admin/notifications"' in response.text
+
+
+def test_department_page_manages_departments_and_active_options(
+    client: TestClient,
+    seed_data: dict,
+) -> None:
+    _login_admin(
+        client,
+        email=seed_data["credentials"]["admin_email"],
+        password=seed_data["credentials"]["admin_password"],
+    )
+
+    page = client.get("/admin/departments", headers=HTML_HEADERS)
+    assert page.status_code == 200
+    assert 'data-template="admin-departments"' in page.text
+    assert 'action="/admin/departments/page"' in page.text
+    assert "院系管理" in page.text
+
+    active_create = _post_form(
+        client,
+        "/admin/departments/page",
+        {
+            "form_action": "create",
+            "name": "Portal Active Department",
+            "code": "PAD",
+            "is_active": "on",
+        },
+    )
+    assert active_create.status_code == 200
+    assert "院系创建成功" in active_create.text
+
+    inactive_create = _post_form(
+        client,
+        "/admin/departments/page",
+        {
+            "form_action": "create",
+            "name": "Portal Inactive Department",
+            "code": "PID",
+        },
+    )
+    assert inactive_create.status_code == 200
+
+    departments = client.get("/admin/departments").json()["items"]
+    active_department = next(item for item in departments if item["code"] == "PAD")
+    inactive_department = next(item for item in departments if item["code"] == "PID")
+
+    user_create_page = client.get("/admin/users/new", headers=HTML_HEADERS)
+    rooms_page = client.get("/admin/rooms", headers=HTML_HEADERS)
+    assert "Portal Active Department（PAD）" in user_create_page.text
+    assert "Portal Active Department（PAD）" in rooms_page.text
+    assert "Portal Inactive Department（PID）" not in user_create_page.text
+    assert "Portal Inactive Department（PID）" not in rooms_page.text
+
+    deactivate_active = _post_form(
+        client,
+        "/admin/departments/page",
+        {
+            "form_action": "deactivate",
+            "department_id": str(active_department["id"]),
+        },
+    )
+    assert deactivate_active.status_code == 200
+    assert "院系已停用" in deactivate_active.text
+
+    activate_inactive = _post_form(
+        client,
+        "/admin/departments/page",
+        {
+            "form_action": "activate",
+            "department_id": str(inactive_department["id"]),
+        },
+    )
+    assert activate_inactive.status_code == 200
+    assert "院系已启用" in activate_inactive.text
+
+    user_create_page_after_toggle = client.get("/admin/users/new", headers=HTML_HEADERS)
+    rooms_page_after_toggle = client.get("/admin/rooms", headers=HTML_HEADERS)
+    assert "Portal Active Department（PAD）" not in user_create_page_after_toggle.text
+    assert "Portal Active Department（PAD）" not in rooms_page_after_toggle.text
+    assert "Portal Inactive Department（PID）" in user_create_page_after_toggle.text
+    assert "Portal Inactive Department（PID）" in rooms_page_after_toggle.text
+
+    duplicate_name = _post_form(
+        client,
+        "/admin/departments/page",
+        {
+            "form_action": "create",
+            "name": "Portal Inactive Department",
+            "code": "PID2",
+            "is_active": "on",
+        },
+    )
+    assert duplicate_name.status_code == 409
+    assert 'data-template="admin-departments"' in duplicate_name.text
+    assert "院系名称已存在" in duplicate_name.text
+    assert "内部错误" not in duplicate_name.text
 
 
 def test_html_pages_keep_server_side_permission_checks(client: TestClient, seed_data: dict) -> None:
@@ -1005,6 +1119,9 @@ def test_room_and_seat_pages_submit_forms(client: TestClient, seed_data: dict) -
     assert 'data-form-variant="admin-shared"' in rooms_page.text
     assert 'data-switch-style="compact"' in rooms_page.text
     assert 'data-switch-purpose="immediate-activation"' in rooms_page.text
+    rooms_template = (TEMPLATE_ROOT / "rooms.html").read_text(encoding="utf-8")
+    assert "function bindRoomForm(form)" in rooms_template
+    assert "bindRoomForm(forms[index])" in rooms_template
 
     create_room_response = _post_form(
         client,
@@ -1197,6 +1314,144 @@ def test_system_config_and_reservation_action_pages_submit_forms(client: TestCli
     assert cancelled_reservation.cancel_reason == "Cancelled from admin portal html form"
 
 
+def test_checkins_page_shows_dynamic_code_and_lists_records(client: TestClient, seed_data: dict) -> None:
+    _login_admin(
+        client,
+        email=seed_data["credentials"]["admin_email"],
+        password=seed_data["credentials"]["admin_password"],
+    )
+    seeded = _seed_room_with_seat(
+        seed_data,
+        room_name="Admin Portal Checkin Room",
+        seat_code="APC-01",
+        seat_label="Checkin Seat",
+    )
+    today = datetime.now().date()
+    reservation_id = _insert_admin_portal_reservation(
+        user_id=seed_data["users"]["student"],
+        seat_id=seeded["seat_id"],
+        room_id=seeded["room_id"],
+        start_time=datetime.combine(today, time(9, 0)),
+        end_time=datetime.combine(today, time(10, 0)),
+    )
+    with SessionLocal() as session:
+        session.add(
+            CheckinRecord(
+                reservation_id=reservation_id,
+                user_id=seed_data["users"]["student"],
+                room_id=seeded["room_id"],
+                seat_id=seeded["seat_id"],
+                checkin_method="CODE",
+                checkin_at=datetime.combine(today, time(9, 5)),
+                is_valid=True,
+            ),
+        )
+        session.commit()
+
+    page = client.get("/admin/checkins", params={"room_id": seeded["room_id"]}, headers=HTML_HEADERS)
+    assert page.status_code == 200
+    assert 'data-template="admin-checkins"' in page.text
+    assert "动态签到码" in page.text
+    assert "当前动态签到码" in page.text
+    assert 'action="/admin/checkins/page"' not in page.text
+    assert "生成或查看签到码" not in page.text
+    assert str(reservation_id) in page.text
+
+    payload_response = client.get("/admin/checkins", params={"room_id": seeded["room_id"]})
+    assert payload_response.status_code == 200
+    payload = payload_response.json()
+    assert payload["code"]["room_id"] == seeded["room_id"]
+    assert payload["code"]["code"]
+    assert payload["code"]["time_slice_start"]
+    assert payload["code"]["expires_at"]
+    assert payload["items"]
+
+
+def test_checkins_page_returns_html_for_invalid_room_id(client: TestClient, seed_data: dict) -> None:
+    _login_admin(
+        client,
+        email=seed_data["credentials"]["admin_email"],
+        password=seed_data["credentials"]["admin_password"],
+    )
+
+    page = client.get("/admin/checkins", params={"room_id": "999999"}, headers=HTML_HEADERS)
+    assert page.status_code == 404
+    assert page.headers["content-type"].startswith("text/html")
+    assert 'data-template="admin-checkins"' in page.text
+    assert not page.text.lstrip().startswith("{")
+
+
+def test_checkins_page_returns_json_for_invalid_room_id_when_not_html(
+    client: TestClient,
+    seed_data: dict,
+) -> None:
+    _login_admin(
+        client,
+        email=seed_data["credentials"]["admin_email"],
+        password=seed_data["credentials"]["admin_password"],
+    )
+
+    page = client.get("/admin/checkins", params={"room_id": "999999"})
+    assert page.status_code == 404
+    assert page.headers["content-type"].startswith("application/json")
+    payload = page.json()
+    assert payload["code"] == "not_found"
+    assert payload["details"]
+
+
+def test_notifications_page_lists_logs_and_triggers_tasks(client: TestClient, seed_data: dict) -> None:
+    _login_admin(
+        client,
+        email=seed_data["credentials"]["admin_email"],
+        password=seed_data["credentials"]["admin_password"],
+    )
+    seeded = _seed_room_with_seat(
+        seed_data,
+        room_name="Admin Portal Notification Room",
+        seat_code="APN-01",
+        seat_label="Notification Seat",
+    )
+    now = (datetime.now() + timedelta(days=1)).replace(minute=0, second=0, microsecond=0)
+    reservation_id = _insert_admin_portal_reservation(
+        user_id=seed_data["users"]["student"],
+        seat_id=seeded["seat_id"],
+        room_id=seeded["room_id"],
+        start_time=now + timedelta(minutes=15),
+        end_time=now + timedelta(hours=1),
+    )
+    with SessionLocal() as session:
+        session.add(
+            NotificationLog(
+                user_id=seed_data["users"]["student"],
+                reservation_id=reservation_id,
+                notification_type=NOTIFICATION_TYPE_RESERVATION_REMINDER,
+                channel=NOTIFICATION_CHANNEL_MOCK,
+                status=NOTIFICATION_STATUS_SENT,
+                message="seeded notification log",
+                sent_at=now - timedelta(minutes=1),
+            ),
+        )
+        session.commit()
+
+    page = client.get("/admin/notifications", params={"reservation_id": reservation_id}, headers=HTML_HEADERS)
+    assert page.status_code == 200
+    assert 'data-template="admin-notifications"' in page.text
+    assert str(reservation_id) in page.text
+    assert NOTIFICATION_TYPE_RESERVATION_REMINDER in page.text
+
+    trigger = _post_form(
+        client,
+        "/admin/notifications/page",
+        {
+            "notification_type": "NO_SHOW_REMINDER",
+            "now": now.isoformat(timespec="minutes"),
+        },
+    )
+    assert trigger.status_code == 200
+    assert "通知任务已执行" in trigger.text
+    assert "最近一次触发" in trigger.text
+
+
 def test_violations_page_renders_filtered_html_results(client: TestClient, seed_data: dict) -> None:
     seeded = _seed_violation_records(seed_data)
     _login_admin(
@@ -1207,7 +1462,7 @@ def test_violations_page_renders_filtered_html_results(client: TestClient, seed_
 
     response = client.get(
         "/admin/violations",
-        params={"user_id": seeded["user_id"]},
+        params={"student_no": seeded["student_no"]},
         headers=HTML_HEADERS,
     )
 
@@ -1215,7 +1470,12 @@ def test_violations_page_renders_filtered_html_results(client: TestClient, seed_
     assert response.headers["content-type"].startswith("text/html")
     assert VIOLATION_TYPE_NO_SHOW_TIMEOUT in response.text
     assert str(seeded["user_id"]) in response.text
+    assert seeded["student_no"] in response.text
     assert str(seeded["room_id"]) in response.text
+
+    all_response = client.get("/admin/violations", headers=HTML_HEADERS)
+    assert all_response.status_code == 200
+    assert str(seeded["reservation_id"]) in all_response.text
 
 
 def test_violations_page_returns_html_bad_request_for_invalid_date_range(client: TestClient, seed_data: dict) -> None:
@@ -1236,6 +1496,31 @@ def test_violations_page_returns_html_bad_request_for_invalid_date_range(client:
     assert response.headers["content-type"].startswith("text/html")
     assert 'data-template="admin-violations"' in response.text
     assert "开始日期不能晚于结束日期。" in response.text
+    assert "bad_request" not in response.text
+
+
+def test_violations_page_returns_html_bad_request_for_invalid_numeric_filter(
+    client: TestClient,
+    seed_data: dict,
+) -> None:
+    _seed_violation_records(seed_data)
+    _login_admin(
+        client,
+        email=seed_data["credentials"]["admin_email"],
+        password=seed_data["credentials"]["admin_password"],
+    )
+
+    response = client.get(
+        "/admin/violations",
+        params={"user_id": "abc"},
+        headers=HTML_HEADERS,
+    )
+
+    assert response.status_code == 400
+    assert response.headers["content-type"].startswith("text/html")
+    assert 'data-template="admin-violations"' in response.text
+    assert "用户 ID 必须是数字。" in response.text
+    assert "bad_request" not in response.text
 
 
 def test_violations_page_returns_json_bad_request_for_invalid_date_range(client: TestClient, seed_data: dict) -> None:

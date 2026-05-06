@@ -4,6 +4,7 @@ from datetime import date as dt_date
 from datetime import datetime
 from datetime import time
 from datetime import timedelta
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -365,3 +366,15 @@ def test_student_assistant_query_returns_controlled_failure_for_unknown_message(
     assert payload["intent"] is None
     assert payload["result_type"] == "CONTROLLED_FAILURE"
     assert payload["result"]["code"] == "INTENT_NOT_RECOGNIZED"
+
+
+def test_miniprogram_assistant_renders_user_facing_results() -> None:
+    root = Path(__file__).resolve().parents[2]
+    assistant_js = (root / "miniprogram" / "pages" / "assistant" / "assistant.js").read_text(encoding="utf-8")
+    assistant_wxml = (root / "miniprogram" / "pages" / "assistant" / "assistant.wxml").read_text(encoding="utf-8")
+
+    assert "JSON.stringify(response.result" not in assistant_js
+    assert "buildResultView(response)" in assistant_js
+    assert "assistant-result-card" in assistant_wxml
+    assert "resultView.kind === 'empty'" in assistant_wxml
+    assert "resultView.kind === 'error'" in assistant_wxml

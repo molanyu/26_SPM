@@ -5,6 +5,7 @@ from datetime import time
 from fastapi.testclient import TestClient
 
 from app.core.database import SessionLocal
+from app.modules.identity.models.department import Department
 from app.modules.resource.models.seat import Seat
 from app.modules.resource.models.study_room import StudyRoom
 
@@ -165,6 +166,67 @@ def test_admin_room_api_rejects_invalid_department_on_create_and_update(client: 
     assert update_invalid_response.status_code == 400
     assert update_invalid_response.json()["code"] == "bad_request"
     assert "所选院系不存在或已停用，请重新选择。" in update_invalid_response.json()["message"]
+
+
+def test_admin_room_api_rejects_inactive_department_on_create_and_update(client: TestClient, seed_data: dict):
+    with SessionLocal() as session:
+        inactive_department = Department(name="Inactive Resource Department", code="IRD", is_active=False)
+        session.add(inactive_department)
+        session.commit()
+        inactive_department_id = inactive_department.id
+
+    _login_admin(
+        client,
+        email=seed_data["credentials"]["admin_email"],
+        password=seed_data["credentials"]["admin_password"],
+    )
+
+    create_inactive_response = client.post(
+        "/admin/rooms",
+        json={
+            "name": "Inactive Department Room",
+            "location": "Building G",
+            "department_id": inactive_department_id,
+            "is_department_only": True,
+            "is_active": True,
+            "open_time": "08:00:00",
+            "close_time": "21:00:00",
+        },
+    )
+    assert create_inactive_response.status_code == 400
+    assert create_inactive_response.json()["code"] == "bad_request"
+    assert "所选院系不存在或已停用，请重新选择。" in create_inactive_response.json()["message"]
+
+    create_valid_response = client.post(
+        "/admin/rooms",
+        json={
+            "name": "Active Department Room",
+            "location": "Building H",
+            "department_id": seed_data["departments"]["cs"],
+            "is_department_only": True,
+            "is_active": True,
+            "open_time": "08:00:00",
+            "close_time": "21:00:00",
+        },
+    )
+    assert create_valid_response.status_code == 200
+    room_id = create_valid_response.json()["data"]["id"]
+
+    update_inactive_response = client.put(
+        f"/admin/rooms/{room_id}",
+        json={
+            "name": "Inactive Department Room Updated",
+            "location": "Building I",
+            "department_id": inactive_department_id,
+            "is_department_only": True,
+            "is_active": True,
+            "open_time": "09:00:00",
+            "close_time": "22:00:00",
+        },
+    )
+    assert update_inactive_response.status_code == 400
+    assert update_inactive_response.json()["code"] == "bad_request"
+    assert "所选院系不存在或已停用，请重新选择。" in update_inactive_response.json()["message"]
 
 
 def test_admin_can_create_update_list_and_deactivate_seat(client: TestClient, seed_data: dict):

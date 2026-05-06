@@ -1,0 +1,72 @@
+<section class="panel-grid" data-template="admin-notifications">
+  <article class="panel">
+    <div class="section-head">
+      <div>
+        <h3>通道状态</h3>
+        <p>当前默认通道：<code>{{ notification_default_channel }}</code></p>
+        <p class="muted">SMTP 主机：{{ smtp_host }}</p>
+      </div>
+    </div>
+    {{{ trigger_result_html }}}
+  </article>
+
+  <article class="panel">
+    <div class="section-head">
+      <div>
+        <h3>手动触发任务</h3>
+        <p>用于本地手动验收时间推进；不会创建新的调度规则。</p>
+      </div>
+    </div>
+    <form method="post" action="/admin/notifications/page">
+      <div class="fields">
+        <label>任务类型
+          <select name="notification_type">
+            <option value="RESERVATION_REMINDER">预约前提醒</option>
+            <option value="NO_SHOW_REMINDER">未签到提醒</option>
+            <option value="AUTO_CANCEL_NOTICE">自动取消通知</option>
+          </select>
+        </label>
+        <label>触发时间<input type="datetime-local" name="now" placeholder="2026-05-01T09:15"></label>
+      </div>
+      <div class="actions"><button class="secondary" type="submit">执行任务</button></div>
+    </form>
+  </article>
+
+  <article class="panel">
+    <div class="section-head">
+      <div>
+        <h3>日志筛选</h3>
+        <p>按预约、通知类型和状态查看发送记录。</p>
+      </div>
+    </div>
+    <form method="get" action="/admin/notifications">
+      <div class="fields">
+        <label>预约 ID<input name="reservation_id" value="{{ filter_reservation_id }}"></label>
+        <label>通知类型
+          <select name="notification_type">{{{ notification_type_options_html }}}</select>
+        </label>
+        <label>状态
+          <select name="status">{{{ status_options_html }}}</select>
+        </label>
+        <label>页码<input type="number" min="1" name="page" value="{{ filter_page }}"></label>
+        <label>每页条数<input type="number" min="1" name="page_size" value="{{ filter_page_size }}"></label>
+      </div>
+      <div class="actions"><button class="secondary" type="submit">查询日志</button></div>
+    </form>
+  </article>
+
+  <article class="panel panel-wide">
+    <div class="section-head">
+      <div>
+        <h3>通知日志</h3>
+        <p class="muted">共 {{ notification_logs_total }} 条记录</p>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>日志 ID</th><th>预约</th><th>用户</th><th>类型</th><th>通道</th><th>状态</th><th>发送时间</th><th>内容</th></tr></thead>
+        <tbody>{{{ notification_log_rows_html }}}</tbody>
+      </table>
+    </div>
+  </article>
+</section>

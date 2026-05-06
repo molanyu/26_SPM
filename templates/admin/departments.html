@@ -1,0 +1,52 @@
+<section class="panel-grid" data-template="admin-departments">
+  <article class="panel">
+    <div class="section-head">
+      <div>
+        <h3>新增院系</h3>
+        <p>院系用于学生归属和院系专属自习室开放范围；停用后不会删除历史记录。</p>
+      </div>
+    </div>
+    <div class="metric-grid">
+      <div class="metric">
+        <strong>{{ department_count }}</strong>
+        <span>院系总数</span>
+      </div>
+      <div class="metric">
+        <strong>{{ active_department_count }}</strong>
+        <span>当前启用</span>
+      </div>
+      <div class="metric">
+        <strong>{{ inactive_department_count }}</strong>
+        <span>已停用</span>
+      </div>
+    </div>
+    <form method="post" action="/admin/departments/page" class="form-shell" data-form-variant="admin-shared">
+      <input type="hidden" name="form_action" value="create">
+      <div class="fields">
+        <label>院系名称<input name="name" value="{{ create_name }}" required></label>
+        <label>院系编码<input name="code" value="{{ create_code }}" required></label>
+      </div>
+      <div class="form-section">
+        <div class="form-section-head">
+          <div>
+            <h4>启用状态</h4>
+            <p>只有启用院系会出现在创建用户和创建院系专属自习室的下拉列表中。</p>
+          </div>
+        </div>
+        {{{ create_active_toggle_html }}}
+      </div>
+      <p class="form-hint">院系名称和编码必须唯一；重复提交会返回受控错误。</p>
+      <div class="form-actions"><button type="submit">创建院系</button></div>
+    </form>
+  </article>
+
+  <article class="panel">
+    <div class="section-head">
+      <div>
+        <h3>院系列表</h3>
+        <p>这里展示全部院系，包括已停用项；启用状态会影响后续表单可选范围。</p>
+      </div>
+    </div>
+    <div class="list-grid">{{{ department_cards_html }}}</div>
+  </article>
+</section>

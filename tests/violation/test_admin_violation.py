@@ -117,6 +117,7 @@ def _seed_violation_records(seed_data: dict) -> dict[str, int]:
         session.commit()
         return {
             "student_user": seed_data["users"]["student"],
+            "student_no": seed_data["credentials"]["student_no"],
             "target_user": seed_data["users"]["target"],
             "cs_room": cs_room.id,
             "math_room": math_room.id,
@@ -134,6 +135,15 @@ def test_admin_can_query_violations_with_supported_filters(client: TestClient, s
     response = client.get("/admin/violations")
     assert response.status_code == 200
     assert response.json()["total"] == 2
+
+    student_no_filtered = client.get(
+        "/admin/violations",
+        params={"student_no": resource_ids["student_no"]},
+    )
+    assert student_no_filtered.status_code == 200
+    student_no_items = student_no_filtered.json()["items"]
+    assert len(student_no_items) == 1
+    assert student_no_items[0]["student_no"] == resource_ids["student_no"]
 
     user_filtered = client.get(
         "/admin/violations",

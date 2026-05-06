@@ -119,6 +119,11 @@
 
 - 创建预约
 
+规则：
+
+- `start_time` 必须晚于当前时间
+- `start_time` 和 `end_time` 必须按 30 分钟粒度提交，分钟只允许为 `00` 或 `30`，秒和微秒必须为 `0`
+
 输入核心字段：
 
 - `seat_id`
@@ -386,6 +391,12 @@
 
 - 管理员代预约
 
+规则：
+
+- 与学生创建预约使用同一套预约时间规则
+- `start_time` 必须晚于当前时间
+- `start_time` 和 `end_time` 必须按 30 分钟粒度提交
+
 #### `POST /admin/reservations/{reservation_id}/cancel`
 
 用途：
@@ -403,9 +414,16 @@
 输入参数：
 
 - `user_id`
+- `student_no`
 - `room_id`
 - `date_from`
 - `date_to`
+
+说明：
+
+- 所有筛选条件均可选
+- 无筛选条件时默认分页返回全部违约记录
+- 管理端 HTML 页面发生参数错误时必须渲染统一页面错误，不返回裸 JSON
 
 #### `GET /admin/statistics/usage`
 
@@ -413,7 +431,49 @@
 
 - 查询使用率和违约率统计
 
-### 5.5 identity-rbac
+### 5.5 checkin
+
+#### `GET /admin/checkins`
+
+用途：
+
+- 查看指定自习室当前动态签到码状态
+- 查看签到记录
+
+说明：
+
+- 管理端 HTML 请求返回动态签到码与签到记录页面
+- 非 HTML/API 请求返回当前动态码状态与签到记录数据
+- 不提供人工代签到、补签或批量操作
+- 不提供生成签到码动作；当前动态码由服务端按自习室和 5 分钟时间片自动派生
+
+### 5.6 notification
+
+#### `GET /admin/notifications`
+
+用途：
+
+- 查看通知日志
+- 查看当前通知通道配置
+
+说明：
+
+- 管理端 HTML 请求返回通知日志与任务触发页面
+- 非 HTML/API 请求返回通知日志数据
+
+#### `POST /admin/notifications/page`
+
+用途：
+
+- 从管理端页面手动触发已有内部通知任务
+
+说明：
+
+- 仅支持 `RESERVATION_REMINDER`、`NO_SHOW_REMINDER`、`AUTO_CANCEL_NOTICE`
+- 可传入固定 `now`，用于本地手动验收时间推进
+- 不提供复杂调度、SMTP 配置管理或外部 smoke 自动化
+
+### 5.7 identity-rbac
 
 #### `GET /admin/roles`
 
@@ -445,6 +505,87 @@
 
 - 查询权限点列表
 
+#### `GET /admin/departments`
+
+用途：
+
+- 查询院系列表
+
+权限：
+
+- `identity.departments.write`
+
+说明：
+
+- 管理端 HTML 请求可返回院系管理页面
+- 非 HTML/API 请求返回院系列表数据
+- 列表包含启用和停用院系；创建用户和创建自习室的下拉选项仍只使用启用院系
+
+返回核心字段：
+
+- `id`
+- `name`
+- `code`
+- `is_active`
+
+#### `POST /admin/departments`
+
+用途：
+
+- 创建院系
+
+权限：
+
+- `identity.departments.write`
+
+说明：
+
+- 仅支持单个创建
+- 不支持批量导入、删除、院系树或复杂组织架构
+- 重复院系名称或编码必须返回受控冲突错误
+
+输入核心字段：
+
+- `name`
+- `code`
+- `is_active`
+
+返回核心字段：
+
+- `id`
+- `name`
+- `code`
+- `is_active`
+
+#### `POST /admin/departments/{department_id}/activate`
+
+用途：
+
+- 启用院系
+
+权限：
+
+- `identity.departments.write`
+
+说明：
+
+- 启用后可出现在创建用户和院系专属自习室的院系下拉选项中
+
+#### `POST /admin/departments/{department_id}/deactivate`
+
+用途：
+
+- 停用院系
+
+权限：
+
+- `identity.departments.write`
+
+说明：
+
+- 停用后不得出现在创建用户和创建自习室的可选院系列表中
+- 停用不做物理删除，不影响历史用户、自习室和预约记录
+
 #### `POST /admin/users`
 
 用途：
@@ -475,7 +616,7 @@
 - 第一版为保持账号语义清晰，同一创建请求不同时提交 `student_no` 与管理员登录标识 `email`
 - `email` 字段第一版仅作为管理员登录标识，不强制邮件格式，可使用普通文本账号
 - `notification_email` 如提供，必须是可用邮箱格式，且不得与既有 `User.email` 重复
-- `department_id` 如提供，必须指向有效院系
+- `department_id` 如提供，必须指向有效且启用的院系
 
 返回核心字段：
 
@@ -497,7 +638,7 @@
 
 - `role_ids`
 
-### 5.6 system_config
+### 5.8 system_config
 
 #### `GET /admin/system-configs`
 
@@ -521,7 +662,7 @@
 
 内部任务固定包括：
 
-- 生成每日动态签到码
+- 动态签到码由 checkin service 按需派生，不设置每日生成任务作为当前码来源
 - 发送预约前提醒
 - 发送未签到提醒
 - 执行超时释放
@@ -534,6 +675,7 @@
 - 角色和权限由 `identity` 模块统一判定
 - 菜单可见性和操作权限必须同时受权限控制
 - 写接口必须做服务端权限校验，不能只依赖前端隐藏按钮
+- 院系管理写操作需要 `identity.departments.write` 权限，菜单入口也必须按该权限裁剪
 - 学生端使用 Bearer Token 访问受保护接口
 - 管理端使用服务端会话访问受保护页面和接口
 - 未登录访问受保护管理端 HTML 页面时，应重定向到 `/admin/login`

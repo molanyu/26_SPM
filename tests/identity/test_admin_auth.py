@@ -49,6 +49,8 @@ def test_admin_me_returns_permissions_and_filtered_menus(client: TestClient, see
         {"code": "admin.dashboard", "label": "管理首页"},
         {"code": "reservation.records", "label": "预约记录"},
         {"code": "reservation.actions", "label": "代理预约"},
+        {"code": "checkin.records", "label": "动态签到码"},
+        {"code": "notification.logs", "label": "通知日志"},
     ]
 
 

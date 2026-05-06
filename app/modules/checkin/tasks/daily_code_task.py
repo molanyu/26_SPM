@@ -8,7 +8,7 @@ from app.core.config import Settings
 from app.modules.checkin.services.code_service import CodeService
 
 
-def generate_daily_checkin_codes(
+def get_current_dynamic_checkin_codes(
     session: Session,
     *,
     run_date: date | None = None,
@@ -16,4 +16,8 @@ def generate_daily_checkin_codes(
     settings: Settings | None = None,
 ):
     service = CodeService(session, settings=settings)
-    return service.ensure_daily_codes(code_date=run_date or (now or datetime.now()).date(), now=now)
+    resolved_now = now or (datetime.combine(run_date, datetime.min.time()) if run_date is not None else None)
+    return service.get_current_dynamic_codes(now=resolved_now)
+
+
+generate_daily_checkin_codes = get_current_dynamic_checkin_codes

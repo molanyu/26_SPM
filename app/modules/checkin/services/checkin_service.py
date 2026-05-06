@@ -100,19 +100,16 @@ class CheckinService:
 
         room = self.room_service.get_room_snapshot(reservation.room_id)
         self._validate_checkin_window(reservation.start_time, now)
-        expected_code_date = reservation.start_time.date()
         if method == CHECKIN_METHOD_CODE:
             self.code_service.validate_dynamic_code(
                 room_id=room.room_id,
                 submitted_code=submitted_code or "",
-                code_date=expected_code_date,
                 now=now,
             )
         else:
             self.code_service.validate_qrcode_token(
                 room_id=room.room_id,
                 token=token or "",
-                code_date=expected_code_date,
                 now=now,
             )
 

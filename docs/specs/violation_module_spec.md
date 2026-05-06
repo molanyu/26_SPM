@@ -49,9 +49,12 @@
 - 管理端必须支持查询违约记录
 - 查询至少支持以下过滤条件：
   - `user_id`
+  - `student_no`
   - `room_id`
   - `date_from`
   - `date_to`
+- 所有过滤条件均为可选项，无筛选条件时默认分页返回全部违约记录
+- `user_id`、`student_no`、`room_id`、`date_from`、`date_to` 必须支持任意单独使用或任意组合使用
 - 违约查询只返回已经落账的违约记录
 
 ## 3. 模块边界
@@ -68,6 +71,7 @@
 - `violation` 不直接调用 `checkin` 的 repository 或 service
 - `violation` 不直接写 `reservation` 的数据状态
 - 若违约查询需要按 `room_id` 过滤，过滤条件必须通过 `reservation` 关联关系获得，不允许越过模块边界做跨模块写入
+- 若违约查询需要按 `student_no` 过滤，只允许通过 `identity` 用户数据的只读关联完成查询，不允许在 `violation` 中直接修改用户数据
 
 ## 4. 违约规则
 
@@ -184,8 +188,10 @@ app/modules/violation/api/admin_violation.py
 - 学生主动取消预约不生成违约记录
 - 管理员可查询违约记录
 - 按 `user_id` 过滤违约记录
+- 按 `student_no` 过滤违约记录
 - 按 `room_id` 过滤违约记录
 - 按时间范围过滤违约记录
+- 无筛选条件时默认返回全部违约记录
 - 未认证访问违约接口失败
 - 无权限访问违约接口失败
 

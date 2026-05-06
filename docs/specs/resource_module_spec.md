@@ -221,3 +221,13 @@ app/modules/resource/api/admin_resource.py
 - 自习室管理接口可用
 - 座位管理接口可用
 - 关键资源测试通过
+
+## 12. Spec 增补（2026-04-29）
+
+本轮补入自习室管理与院系可用性的边界说明：
+
+- 院系实体和院系维护能力归属 `identity` 模块。
+- `resource` 模块创建或更新院系专属自习室时，只能接受启用院系。
+- 如果提交的 `department_id` 不存在或已停用，必须返回受控参数错误。
+- `resource` 不新增院系维护接口，不直接写入 `Department`。
+- 管理端自习室页面的院系选项由 `identity` 公开 service 提供的启用院系列表决定。

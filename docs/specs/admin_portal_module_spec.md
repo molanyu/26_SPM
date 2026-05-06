@@ -22,13 +22,16 @@
 - 管理端共享主题与亮暗主题切换
 - 基于权限的菜单渲染
 - 用户创建页面
+- 院系管理页面
 - 自习室管理页面
 - 座位管理页面
 - 系统参数管理页面
 - 预约记录查询页面
 - 管理员代预约与代取消页面
+- 动态签到码与签到记录页面
 - 统计查询页面
 - 违约记录查询页面
+- 通知日志与任务触发页面
 - 角色管理与用户角色分配页面
 
 本次实现不包含以下内容：
@@ -36,7 +39,7 @@
 - 核心业务规则判定
 - 直接数据库读写
 - 复杂图表统计大盘页面
-- 通知运营页面
+- 复杂通知运营页面
 - 助手管理页面
 - 用户列表页
 - 批量导入用户
@@ -51,18 +54,22 @@
 - 登录后基础管理端首页
 - 菜单导航与基础布局
 - 用户创建页
+- 院系管理页
 - `identity` 相关管理页面
 - `resource` 相关管理页面
 - `system_config` 相关管理页面
 - `reservation` 查询与代理操作页面
+- `checkin` 动态签到码与签到记录页面
 - `statistics` 查询页面
 - `violation` 记录查询页面
+- `notification` 日志与任务触发页面
 
 ### 2.2 菜单规则
 
 - 管理端菜单只能基于 `identity` 返回的菜单权限渲染
 - 前端隐藏菜单不是权限校验的替代
 - 即使菜单隐藏，服务端接口仍必须保留权限校验
+- 院系管理入口由 `identity.departments.write` 权限控制，首页快捷入口和侧边栏菜单必须与服务端权限一致
 
 ### 2.3 浏览器登录闭环规则
 
@@ -122,6 +129,7 @@
 跨模块协作规则固定如下：
 
 - 登录态与菜单权限由 `identity` 提供
+- 院系管理页面调用 `identity` 公开 `DepartmentService`
 - 自习室、座位页面调用 `resource` 公开 service
 - 系统参数页面调用 `system_config` 公开 service
 - 代理预约与代取消页面调用 `reservation` 公开 service
@@ -141,6 +149,7 @@
 - `/admin/login`
 - `/admin`
 - `/admin/users/new`
+- `/admin/departments`
 - `/admin/roles`
 - `/admin/users/{user_id}/roles`
 - `/admin/rooms`
@@ -148,16 +157,21 @@
 - `/admin/system-configs`
 - `/admin/reservations/records`
 - `/admin/reservations/actions`
+- `/admin/checkins`
 - `/admin/statistics`
 - `/admin/violations`
+- `/admin/notifications`
 
 说明：
 
 - 这些页面由服务端渲染
+- `/admin/departments` 用于查看、新增、启用和停用院系，不承担院系树、批量导入、删除或复杂组织架构
 - 页面提交动作最终调用对应模块的公开 service 或现有接口
 - `/admin/login` 是浏览器登录页入口
 - 登录成功后默认跳转 `/admin`
 - `/admin/users/new` 用于创建单个学生或管理员账号，不承担用户列表与批量导入
+- `/admin/checkins` 用于查看指定自习室当前动态签到码状态、有效至时间和签到记录，不提供生成签到码、人工代签到或批量补签
+- `/admin/notifications` 用于查看通知日志和手动触发已有内部通知任务，不承担复杂调度或 SMTP 配置管理
 - `POST /admin/login` 与 `POST /admin/logout` 作为浏览器表单入口存在，但底层仍复用 `identity` 的管理员 session 机制
 
 ## 7. 代码边界
@@ -188,11 +202,14 @@ templates/admin/
 app/admin_portal/routes/admin_login.py
 app/admin_portal/routes/admin_home.py
 app/admin_portal/routes/admin_identity.py
+app/admin_portal/routes/admin_department.py
 app/admin_portal/routes/admin_resource.py
 app/admin_portal/routes/admin_system_config.py
 app/admin_portal/routes/admin_reservation.py
+app/admin_portal/routes/admin_checkin.py
 app/admin_portal/routes/admin_statistics.py
 app/admin_portal/routes/admin_violation.py
+app/admin_portal/routes/admin_notification.py
 
 app/admin_portal/routes/dependencies.py
 app/admin_portal/services/menu_service.py
@@ -202,6 +219,7 @@ templates/admin/login.html
 templates/admin/layout.html
 templates/admin/home.html
 templates/admin/user_create.html
+templates/admin/departments.html
 templates/admin/roles.html
 templates/admin/user_roles.html
 templates/admin/rooms.html
@@ -209,8 +227,10 @@ templates/admin/seats.html
 templates/admin/system_configs.html
 templates/admin/reservation_records.html
 templates/admin/reservation_actions.html
+templates/admin/checkins.html
 templates/admin/statistics.html
 templates/admin/violations.html
+templates/admin/notifications.html
 ```
 
 ## 9. 实现顺序
@@ -245,13 +265,20 @@ templates/admin/violations.html
 - 用户创建页面选择学生账号时，可填写可选通知邮箱并保存
 - 用户创建页面应清楚区分学生学号、学生通知邮箱和管理员登录标识
 - 用户创建页对重复标识、无效院系和非法输入返回受控错误
+- `/admin/departments` 页面可正常访问并提交院系创建、启用和停用
+- 院系管理入口按 `identity.departments.write` 权限展示
+- 用户创建页和自习室管理页只展示启用院系
 - 自习室管理页面可正常提交创建与修改
+- `/admin/rooms` 页面开放范围切换为院系专属时，当前表单所属院系下拉框可用
 - 座位管理页面可正常提交创建与修改
 - 系统参数页面可正常提交参数更新
 - 预约记录页面可正常展示筛选结果
 - 代理预约页面可正常提交代预约与代取消
+- 动态签到码页面可查看指定自习室当前动态码状态、有效至时间和签到记录，且不提供生成、补签或代签到动作
 - 统计页面可正常展示统计结果
-- 违约记录页面可正常展示查询结果
+- 违约记录页面无筛选时默认展示全部记录，并支持按 `user_id`、`student_no`、`room_id`、日期任意组合筛选
+- 违约记录页面参数错误时返回统一 HTML 错误，不裸露 JSON
+- 通知页面可展示通知日志，并可手动触发预约前提醒、未签到提醒和自动取消通知任务
 - 无权限访问页面被拒绝或重定向
 
 ## 11. 完成标准
@@ -265,7 +292,33 @@ templates/admin/violations.html
 - 亮色/暗色主题可切换且刷新后保持
 - 菜单按权限正确渲染
 - 管理端可通过独立页面创建单个学生或管理员账号
+- 管理端可通过院系管理页面维护最小院系基础数据
+- 院系管理菜单按 `identity.departments.write` 权限可见
+- 用户创建和自习室创建的院系选项只包含启用院系
 - 管理端可查询预约记录与统计结果
+- 管理端可完成手动验收所需的当前动态签到码状态、签到记录、通知日志与通知任务触发核对
 - 已实现业务模块具备对应后台页面
 - 表单提交与服务端返回一致
 - 关键管理端页面测试通过
+
+## 12. Spec 增补（2026-04-29）
+
+本轮补入“院系管理页面与自习室院系选择修复”能力，目标是让本地管理端完成院系基础数据闭环。
+
+范围固定如下：
+
+- 管理端新增 `/admin/departments` 页面。
+- 页面提供最小能力：查看院系列表、新增院系、启用院系、停用院系。
+- 院系页面只调用 `identity` 模块公开 `DepartmentService`，不得直接操作 repository 或 model。
+- 管理端菜单和首页快捷入口加入“院系管理”，入口可见性由 `identity.departments.write` 权限控制。
+- 用户创建页和自习室管理页继续只展示启用院系。
+- 已停用院系不得出现在用户创建和自习室创建的院系下拉列表中。
+- `/admin/rooms` 页面中“开放范围=院系专属”必须只启用当前表单内的所属院系下拉框，避免多个表单共享循环变量导致交互失效。
+- 重复院系名称或编码必须展示受控 HTML 错误，不允许内部错误裸露。
+
+不包含以下内容：
+
+- 批量导入院系。
+- 删除院系。
+- 复杂组织架构或院系树。
+- 新视觉体系或独立前端状态框架。

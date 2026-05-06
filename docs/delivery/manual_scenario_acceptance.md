@@ -2,23 +2,30 @@
 
 ## 1. 文档定位
 
-本文档用于在真实运行库中手动验收自习室预约系统的核心业务时间线。
+本文档用于在本机真实运行环境中验收自习室预约系统的核心业务流程。
 
-自动化 `scenario` 测试验证的是隔离测试库中的流程正确性；本文档验证的是本地真实 PostgreSQL、后端服务和管理端页面是否能够完整展示同一条业务链路。
+当前阶段的原则是：
 
-本指南覆盖：
+- 本地项目是唯一修复源，云端只作为后续部署目标。
+- 手动验收优先使用管理端页面按钮完成基础数据准备。
+- 需要推进“预约提醒、签到、超时释放”等时间线时，再使用少量脚本。
+- 验收结果记录到 `docs/delivery/manual_scenario_acceptance_record.md`。
+- 通过项只需要在记录单里勾选；不通过项粘贴截图即可。
 
-- 正常履约流程
-- 未签到违约与座位释放流程
-- 管理端预约记录、违约记录和统计结果核对
-- 通知日志核对
-- 可选真实 QQ SMTP 邮件验证
+本文覆盖：
 
-## 2. 验收前准备
+- 管理端登录、菜单和主题基础可用性
+- 院系、用户、自习室、座位基础数据准备
+- 学生登录、预约、签到
+- 未签到提醒、超时释放、违约记录
+- 管理端预约记录、违约记录和统计核对
+- 可选 QQ SMTP 真实邮件验证
 
-### 2.1 启动依赖
+## 2. 启动本地环境
 
-如果 PostgreSQL 跑在 Docker 中，先确认 Docker Desktop 已启动。
+### 2.1 启动 Docker 和后端
+
+先确认 Docker Desktop 已启动。
 
 在项目根目录执行：
 
@@ -27,16 +34,28 @@ cd C:\Users\67220\Desktop\26_SPM
 powershell -ExecutionPolicy Bypass -File .\scripts\start_backend.ps1 -StartDockerDb
 ```
 
-如果数据库容器已经在运行，可以执行：
+如果数据库容器已经运行，可以只启动后端：
 
 ```powershell
 cd C:\Users\67220\Desktop\26_SPM
 powershell -ExecutionPolicy Bypass -File .\scripts\start_backend.ps1
 ```
 
-脚本会读取 `.env`，执行 `alembic upgrade head`，然后启动 `uvicorn app.main:app`。
+### 2.2 确认 PostgreSQL 迁移到最新
 
-### 2.2 打开管理端
+如果管理端看不到“院系管理”等新增菜单，不要直接裸跑 `alembic upgrade head`。裸跑时可能升级默认 SQLite，而不是本地 PostgreSQL。
+
+请使用下面命令升级真实本地 PostgreSQL：
+
+```powershell
+cd C:\Users\67220\Desktop\26_SPM
+$env:DATABASE_URL='postgresql+psycopg://spm:spm@127.0.0.1:5432/spm'
+alembic upgrade head
+```
+
+升级后重启后端并重新登录管理端。
+
+### 2.3 打开管理端
 
 浏览器访问：
 
@@ -44,221 +63,184 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start_backend.ps1
 http://127.0.0.1:8000/admin/login
 ```
 
-使用当前演示库中的管理员账号登录。
-
-如果登录后看不到资源管理、预约记录、统计或违约入口，先检查该管理员是否拥有对应后台权限。
-
-### 2.3 选择验收日期
-
-建议选择明天或后天，避免被“预约时间必须在未来”的校验影响。
-
-本文示例使用：
+当前演示库常用管理员账号：
 
 ```text
-2026-04-28
+登录标识：admin
+密码：admin
 ```
 
-实际操作时可以替换为你的验收日期。
+登录后应能看到：
 
-### 2.4 记录验收 ID
+- 管理首页
+- 院系管理
+- 创建用户
+- 自习室管理
+- 座位管理
+- 动态签到码
+- 预约记录
+- 违约记录
+- 通知日志
+- 统计查询
 
-手动验收过程中需要记录以下 ID：
+如果入口缺失，先执行 2.2 的 PostgreSQL migration，再重启后端、退出并重新登录。
+
+## 3. 本轮命名规则
+
+为避免和历史数据混在一起，每轮验收使用一个唯一前缀。
+
+示例：
 
 ```text
-ROOM_ID=
-SEAT_ID_NORMAL=
-SEAT_ID_NOSHOW=
-STUDENT_NO=
-NORMAL_RESERVATION_ID=
-NOSHOW_RESERVATION_ID=
+PREFIX=MANUAL-20260429-01
 ```
 
-建议每轮验收使用唯一前缀，例如：
+建议按下面规则填写页面表单：
 
 ```text
-MANUAL-20260428
+院系名称：MANUAL-20260429-01-学院
+院系编码：MANUAL-20260429-01-DEPT
+
+学生姓名：MANUAL-20260429-01-学生
+学生学号：MANUAL-20260429-01-STU
+初始密码：student-pass
+
+自习室名称：MANUAL-20260429-01-ROOM
+自习室位置：手动验收楼 101
+
+正常履约座位编号：MANUAL-20260429-01-NORMAL
+未签到座位编号：MANUAL-20260429-01-NOSHOW
 ```
 
-## 3. 准备验收数据
+预约日期请选择未来日期，避免被“预约时间必须在未来”的校验挡住。示例：
 
-### 3.1 创建学生账号
+```text
+验收日期：2026-05-01
+```
 
-在管理端点击：
+## 4. 用管理端按钮准备基础数据
+
+### 4.1 新增院系
+
+入口：
+
+```text
+管理首页 -> 院系管理
+```
+
+操作：
+
+1. 填写院系名称。
+2. 填写院系编码。
+3. 保持“启用”。
+4. 点击“创建院系”。
+
+通过标准：
+
+- 页面提示创建成功。
+- 院系列表出现刚创建的院系。
+- 该院系处于启用状态。
+
+### 4.2 创建学生用户
+
+入口：
 
 ```text
 管理首页 -> 创建用户
 ```
 
-选择：
+操作：
 
-```text
-学生账号
-```
+1. 选择“学生账号”。
+2. 填写学生姓名、学生学号、初始密码。
+3. 选择刚创建的院系。
+4. 如需验证真实邮件，填写通知邮箱；否则可留空。
+5. 保持“创建后立即启用”。
+6. 点击“创建用户账号”。
 
-建议填写：
+通过标准：
 
-```text
-姓名：手动验收学生
-学生学号：MANUAL-20260428-STU
-初始密码：student-pass
-账号状态：创建后立即启用
-```
+- 页面提示学生账号创建成功。
+- 学生账号可用于学生端登录。
 
-创建成功后，记录学生学号。
+### 4.3 创建院系专属自习室
 
-### 3.2 可选：补充学生邮箱
-
-如果本轮要验证真实 SMTP 邮件，目标学生必须有 `users.email`。
-
-当前学生创建页不负责填写学生邮箱，因此需要在 PowerShell 中补一次邮箱。
-
-说明：
-
-- `.env` 中的 `SMTP_FROM_EMAIL` 是发件邮箱。
-- `users.email` 是收件邮箱。
-- 手动验收时，可以临时把学生的 `users.email` 设置为同一个 QQ 邮箱，方便确认邮件是否真实收到。
-
-先在新的 PowerShell 窗口导入 `.env`：
-
-```powershell
-cd C:\Users\67220\Desktop\26_SPM
-Get-Content .\.env | ForEach-Object {
-    $line = $_.Trim()
-    if ($line -and -not $line.StartsWith("#") -and $line.Contains("=")) {
-        $name, $value = $line -split "=", 2
-        Set-Item -Path "Env:$($name.Trim())" -Value $value.Trim()
-    }
-}
-```
-
-然后执行：
-
-```powershell
-@'
-from sqlalchemy import create_engine, text
-import os
-
-student_no = "MANUAL-20260428-STU"
-email = os.environ["SMTP_FROM_EMAIL"]
-
-engine = create_engine(os.environ["DATABASE_URL"])
-with engine.begin() as conn:
-    conn.execute(
-        text("UPDATE users SET email = :email WHERE student_no = :student_no"),
-        {"email": email, "student_no": student_no},
-    )
-    row = conn.execute(
-        text("SELECT id, student_no, email FROM users WHERE student_no = :student_no"),
-        {"student_no": student_no},
-    ).one()
-    print(dict(row._mapping))
-'@ | python -
-```
-
-如果只验收业务流程，可以不做本步骤，并临时将通知通道设为 `mock`。
-
-### 3.3 创建自习室
-
-在管理端点击：
+入口：
 
 ```text
 管理首页 -> 自习室管理
 ```
 
-创建一个自习室，建议填写：
+操作：
 
-```text
-名称：MANUAL-20260428-ROOM
-位置：手动验收楼 101
-所属院系：选择一个有效院系
-开放时间：08:00
-关闭时间：22:00
-状态：启用
-```
+1. 填写自习室名称和位置。
+2. 开放范围选择“院系专属”。
+3. 所属院系选择刚创建的院系。
+4. 开放时间填写 `08:00`。
+5. 关闭时间填写 `22:00`。
+6. 保持“创建后立即启用”。
+7. 点击“创建自习室”。
 
-创建后记录 `ROOM_ID`。
+通过标准：
 
-如果页面没有直接显示 ID，可以用下面命令查询：
+- 页面提示自习室创建成功。
+- 自习室列表显示刚创建的房间。
+- 卡片中显示“院系专属”和正确院系。
+- 切换“公共开放 / 院系专属”时，当前表单的所属院系下拉框可正常启用和禁用。
 
-```powershell
-@'
-from sqlalchemy import create_engine, text
-import os
+### 4.4 创建两个座位
 
-engine = create_engine(os.environ["DATABASE_URL"])
-with engine.connect() as conn:
-    rows = conn.execute(
-        text("SELECT id, name, location FROM study_rooms ORDER BY id DESC LIMIT 10")
-    )
-    for row in rows:
-        print(dict(row._mapping))
-'@ | python -
-```
-
-### 3.4 创建两个座位
-
-在管理端点击：
+入口：
 
 ```text
 管理首页 -> 座位管理
 ```
 
-在刚创建的自习室下创建两个座位：
+操作：
 
-```text
-座位编号：MANUAL-NORMAL-01
-座位名称：正常履约座位
-状态：启用
-```
+1. 所属自习室选择刚创建的自习室。
+2. 创建正常履约座位，例如 `MANUAL-20260429-01-NORMAL`。
+3. 再创建未签到座位，例如 `MANUAL-20260429-01-NOSHOW`。
+4. 两个座位都保持启用。
 
-```text
-座位编号：MANUAL-NOSHOW-01
-座位名称：未签到违约座位
-状态：启用
-```
+通过标准：
 
-记录两个座位 ID。
+- 座位列表显示两个座位。
+- 两个座位都归属于刚创建的自习室。
 
-如果页面没有直接显示 ID，可以用下面命令查询：
+## 5. 学生端预约与流程推进
 
-```powershell
-@'
-from sqlalchemy import create_engine, text
-import os
+当前项目没有单独的网页学生端，学生端验收可使用微信小程序或 HTTP API。为了稳定复现时间线，推荐本轮使用 PowerShell 调用学生 API 和公开 task/service。
 
-engine = create_engine(os.environ["DATABASE_URL"])
-with engine.connect() as conn:
-    rows = conn.execute(
-        text("""
-            SELECT seats.id, seats.seat_code, seats.seat_label, study_rooms.name AS room_name
-            FROM seats
-            JOIN study_rooms ON study_rooms.id = seats.room_id
-            ORDER BY seats.id DESC
-            LIMIT 10
-        """)
-    )
-    for row in rows:
-        print(dict(row._mapping))
-'@ | python -
-```
+### 5.1 设置基础变量
 
-## 4. 学生端登录和资源查询
-
-下面步骤使用学生 API 模拟学生端操作。所有数据都会写入真实 PostgreSQL。
-
-在 PowerShell 中设置基础变量：
+把下面变量改成本轮实际值：
 
 ```powershell
 $base = "http://127.0.0.1:8000"
-$studentNo = "MANUAL-20260428-STU"
+$studentNo = "MANUAL-20260429-01-STU"
 $studentPassword = "student-pass"
-$date = "2026-04-28"
-$roomId = <ROOM_ID>
-$seatIdNormal = <SEAT_ID_NORMAL>
-$seatIdNoShow = <SEAT_ID_NOSHOW>
+$date = "2026-05-01"
 ```
 
-学生登录：
+如果你不想手动找 ID，可以用下面命令按本轮前缀查询：
+
+```powershell
+$prefix = "MANUAL-20260429-01"
+docker compose exec -T db psql -U spm -d spm -c "SELECT id, name, code, is_active FROM departments WHERE code LIKE '$prefix%';"
+docker compose exec -T db psql -U spm -d spm -c "SELECT id, name, location, department_id, is_department_only, is_active FROM study_rooms WHERE name LIKE '$prefix%';"
+docker compose exec -T db psql -U spm -d spm -c "SELECT id, room_id, seat_code, seat_label, is_active FROM seats WHERE seat_code LIKE '$prefix%' ORDER BY id;"
+```
+
+然后补充：
+
+```powershell
+$roomId = <刚创建的自习室 ID>
+$seatIdNormal = <正常履约座位 ID>
+$seatIdNoShow = <未签到座位 ID>
+```
+
+### 5.2 学生登录
 
 ```powershell
 $loginBody = @{
@@ -277,6 +259,12 @@ $studentHeaders = @{
 }
 ```
 
+通过标准：
+
+- 返回 `access_token`。
+
+### 5.3 查询资源可见性
+
 查询自习室：
 
 ```powershell
@@ -288,7 +276,7 @@ $rooms = Invoke-RestMethod `
 $rooms.items | Format-Table id, name, location
 ```
 
-查询正常履约座位在 `10:00-12:00` 是否可用：
+查询座位：
 
 ```powershell
 $seats = Invoke-RestMethod `
@@ -299,24 +287,20 @@ $seats = Invoke-RestMethod `
 $seats.items | Format-Table seat_id, seat_code, status
 ```
 
-验收点：
+通过标准：
 
-```text
-目标自习室可见。
-目标座位状态为 AVAILABLE。
-```
+- 学生能看到刚创建的院系专属自习室。
+- 两个目标座位在对应时间段为 `AVAILABLE`。
 
-## 5. SCN-01 正常履约流程
+### 5.4 SCN-01：正常履约预约
 
-### 5.1 创建预约
-
-创建 `10:00-12:00` 预约：
+创建 `09:30-10:30` 预约：
 
 ```powershell
 $normalReservationBody = @{
     seat_id = $seatIdNormal
-    start_time = "$date`T10:00:00"
-    end_time = "$date`T12:00:00"
+    start_time = "$date`T09:30:00"
+    end_time = "$date`T10:30:00"
 } | ConvertTo-Json
 
 $normalReservation = Invoke-RestMethod `
@@ -330,35 +314,13 @@ $normalReservationId = $normalReservation.data.reservation_id
 $normalReservation.data
 ```
 
-记录：
-
-```text
-NORMAL_RESERVATION_ID=$normalReservationId
-```
-
-### 5.2 触发预约前提醒
-
-预约前 15 分钟是 `09:45`。
-
-如果你希望本轮不发真实邮件，先在当前 PowerShell 中临时覆盖：
+预约前提醒：
 
 ```powershell
-$env:NOTIFICATION_DEFAULT_CHANNEL = "mock"
-```
-
-如果你希望验证真实 QQ SMTP，保持 `.env` 中：
-
-```text
-NOTIFICATION_DEFAULT_CHANNEL=smtp_email
-```
-
-同时确保该学生已有可用 `email`。
-
-执行提醒任务：
-
-```powershell
+$env:ACCEPTANCE_NOW = "$date`T09:15:00"
 @'
 from datetime import datetime
+import os
 
 from app.core.config import load_settings
 from app.core.database import configure_database, SessionLocal
@@ -368,88 +330,54 @@ settings = load_settings()
 configure_database(settings.database_url)
 
 with SessionLocal() as session:
-    result = send_reservation_reminders(
-        session,
-        now=datetime.fromisoformat("2026-04-28T09:45:00"),
-    )
+    result = send_reservation_reminders(session, now=datetime.fromisoformat(os.environ["ACCEPTANCE_NOW"]))
     print(result.sent_reservation_ids)
 '@ | python -
 ```
 
-再次执行同一命令。
+同一命令再执行一次，第二次应输出空列表。
 
-验收点：
-
-```text
-第一次输出包含 NORMAL_RESERVATION_ID。
-第二次输出为空列表。
-notification_logs 中该预约的 RESERVATION_REMINDER 只有一条。
-若使用 smtp_email，目标邮箱收到提醒邮件。
-```
-
-查询通知日志：
+获取当前动态签到码：
 
 ```powershell
+$env:ACCEPTANCE_ROOM_ID = "$roomId"
+$env:ACCEPTANCE_NOW = "$date`T09:35:00"
 @'
-from sqlalchemy import create_engine, text
+from datetime import datetime
 import os
-
-reservation_id = <NORMAL_RESERVATION_ID>
-
-engine = create_engine(os.environ["DATABASE_URL"])
-with engine.connect() as conn:
-    rows = conn.execute(
-        text("""
-            SELECT id, reservation_id, notification_type, channel, status, sent_at
-            FROM notification_logs
-            WHERE reservation_id = :reservation_id
-            ORDER BY id
-        """),
-        {"reservation_id": reservation_id},
-    )
-    for row in rows:
-        print(dict(row._mapping))
-'@ | python -
-```
-
-### 5.3 生成签到码并完成签到
-
-生成当天自习室签到码：
-
-```powershell
-@'
-from datetime import date, datetime
 
 from app.core.config import load_settings
 from app.core.database import configure_database, SessionLocal
 from app.modules.checkin.services.code_service import CodeService
 
-room_id = <ROOM_ID>
-
 settings = load_settings()
 configure_database(settings.database_url)
 
 with SessionLocal() as session:
-    code = CodeService(session, settings=settings).ensure_daily_code(
-        room_id,
-        code_date=date.fromisoformat("2026-04-28"),
-        now=datetime.fromisoformat("2026-04-28T09:45:00"),
+    code = CodeService(session, settings=settings).get_current_dynamic_code(
+        int(os.environ["ACCEPTANCE_ROOM_ID"]),
+        now=datetime.fromisoformat(os.environ["ACCEPTANCE_NOW"]),
     )
     print(code.code)
 '@ | python -
 ```
 
-记录输出的签到码：
-
-```text
-CHECKIN_CODE=
-```
-
-使用固定业务时间 `10:05` 完成签到：
+把输出的当前 5 分钟时间片签到码填入：
 
 ```powershell
+$checkinCode = "<上一步输出的签到码>"
+```
+
+执行签到：
+
+```powershell
+$env:ACCEPTANCE_STUDENT_NO = "$studentNo"
+$env:ACCEPTANCE_RESERVATION_ID = "$normalReservationId"
+$env:ACCEPTANCE_CHECKIN_CODE = "$checkinCode"
+$env:ACCEPTANCE_NOW = "$date`T09:35:00"
 @'
 from datetime import datetime
+import os
 from sqlalchemy import select
 
 from app.core.config import load_settings
@@ -458,81 +386,30 @@ from app.modules.checkin.schemas.checkin import StudentCodeCheckinRequest
 from app.modules.checkin.services.checkin_service import CheckinService
 from app.modules.identity.models.user import User
 
-student_no = "MANUAL-20260428-STU"
-reservation_id = <NORMAL_RESERVATION_ID>
-checkin_code = "<CHECKIN_CODE>"
-
 settings = load_settings()
 configure_database(settings.database_url)
 
 with SessionLocal() as session:
-    student = session.scalar(select(User).where(User.student_no == student_no))
+    student = session.scalar(select(User).where(User.student_no == os.environ["ACCEPTANCE_STUDENT_NO"]))
     result = CheckinService(session, settings=settings).check_in_by_code(
         student,
-        StudentCodeCheckinRequest(reservation_id=reservation_id, code=checkin_code),
-        now=datetime.fromisoformat("2026-04-28T10:05:00"),
+        StudentCodeCheckinRequest(
+            reservation_id=int(os.environ["ACCEPTANCE_RESERVATION_ID"]),
+            code=os.environ["ACCEPTANCE_CHECKIN_CODE"],
+        ),
+        now=datetime.fromisoformat(os.environ["ACCEPTANCE_NOW"]),
     )
-    print({
-        "reservation_id": result.reservation_id,
-        "status": result.status,
-        "checkin_method": result.checkin_method,
-        "checkin_at": result.checkin_at,
-    })
+    print({"reservation_id": result.reservation_id, "status": result.status})
 '@ | python -
 ```
 
-验收点：
+通过标准：
 
-```text
-输出 status 为 CHECKED_IN。
-管理端预约记录中该预约状态为 CHECKED_IN。
-```
+- 预约创建成功。
+- 预约前提醒第一次包含该预约 ID，第二次为空。
+- 签到输出 `CHECKED_IN`。
 
-### 5.4 管理端核对正常履约结果
-
-浏览器打开：
-
-```text
-http://127.0.0.1:8000/admin/reservations/records
-```
-
-筛选：
-
-```text
-日期范围：2026-04-28 至 2026-04-28
-状态：CHECKED_IN
-```
-
-验收点：
-
-```text
-能看到 NORMAL_RESERVATION_ID。
-状态为 CHECKED_IN。
-用户、房间、座位和时间段正确。
-```
-
-浏览器打开：
-
-```text
-http://127.0.0.1:8000/admin/statistics
-```
-
-筛选：
-
-```text
-日期范围：2026-04-28 至 2026-04-28
-```
-
-验收点：
-
-```text
-统计中体现该预约贡献的使用时长。
-正常履约流程不应新增违约数。
-```
-
-## 6. SCN-02 未签到违约与座位释放流程
-
-### 6.1 创建未签到预约
+### 5.5 SCN-02：未签到违约与座位释放
 
 创建 `14:00-16:00` 预约：
 
@@ -554,19 +431,13 @@ $noShowReservationId = $noShowReservation.data.reservation_id
 $noShowReservation.data
 ```
 
-记录：
-
-```text
-NOSHOW_RESERVATION_ID=$noShowReservationId
-```
-
-### 6.2 触发未签到提醒
-
-预约开始后 10 分钟是 `14:10`。
+触发未签到提醒：
 
 ```powershell
+$env:ACCEPTANCE_NOW = "$date`T14:10:00"
 @'
 from datetime import datetime
+import os
 
 from app.core.config import load_settings
 from app.core.database import configure_database, SessionLocal
@@ -576,31 +447,20 @@ settings = load_settings()
 configure_database(settings.database_url)
 
 with SessionLocal() as session:
-    result = send_no_show_reminders(
-        session,
-        now=datetime.fromisoformat("2026-04-28T14:10:00"),
-    )
+    result = send_no_show_reminders(session, now=datetime.fromisoformat(os.environ["ACCEPTANCE_NOW"]))
     print(result.sent_reservation_ids)
 '@ | python -
 ```
 
-再次执行同一命令。
+同一命令再执行一次，第二次应输出空列表。
 
-验收点：
-
-```text
-第一次输出包含 NOSHOW_RESERVATION_ID。
-第二次输出为空列表。
-notification_logs 中该预约的 NO_SHOW_REMINDER 只有一条。
-```
-
-### 6.3 触发超时自动取消和违约记录
-
-违约阈值默认是 15 分钟。使用 `14:16` 触发，避免边界时间误差。
+触发超时释放：
 
 ```powershell
+$env:ACCEPTANCE_NOW = "$date`T14:16:00"
 @'
 from datetime import datetime
+import os
 
 from app.core.config import load_settings
 from app.core.database import configure_database, SessionLocal
@@ -610,50 +470,14 @@ settings = load_settings()
 configure_database(settings.database_url)
 
 with SessionLocal() as session:
-    result = release_expired_reservations(
-        session,
-        now=datetime.fromisoformat("2026-04-28T14:16:00"),
-    )
+    result = release_expired_reservations(session, now=datetime.fromisoformat(os.environ["ACCEPTANCE_NOW"]))
     print(result.expired_reservation_ids)
 '@ | python -
 ```
 
-再次执行同一命令。
+同一命令再执行一次，第二次应输出空列表。
 
-验收点：
-
-```text
-第一次输出包含 NOSHOW_RESERVATION_ID。
-第二次输出为空列表。
-预约状态变为 EXPIRED。
-违约记录只生成一条。
-```
-
-可选触发自动取消通知：
-
-```powershell
-@'
-from datetime import datetime
-
-from app.core.config import load_settings
-from app.core.database import configure_database, SessionLocal
-from app.modules.notification.tasks.auto_cancel_notice_task import send_auto_cancel_notifications
-
-settings = load_settings()
-configure_database(settings.database_url)
-
-with SessionLocal() as session:
-    result = send_auto_cancel_notifications(
-        session,
-        now=datetime.fromisoformat("2026-04-28T14:16:00"),
-    )
-    print(result.sent_reservation_ids)
-'@ | python -
-```
-
-### 6.4 验证座位释放
-
-重新查询该座位在 `14:00-16:00` 是否可用：
+重新查询座位释放：
 
 ```powershell
 $releasedSeats = Invoke-RestMethod `
@@ -664,211 +488,128 @@ $releasedSeats = Invoke-RestMethod `
 $releasedSeats.items | Format-Table seat_id, seat_code, status
 ```
 
-验收点：
+通过标准：
+
+- 未签到提醒第一次包含该预约 ID，第二次为空。
+- 超时释放第一次包含该预约 ID，第二次为空。
+- 预约状态变为 `EXPIRED`。
+- 该座位重新可用。
+- 违约记录只生成一条。
+
+## 6. 管理端核对
+
+### 6.1 预约记录
+
+入口：
 
 ```text
-未签到预约使用的座位重新显示为 AVAILABLE。
+管理首页 -> 预约记录
 ```
 
-## 7. 管理端核对未签到结果
+核对：
 
-### 7.1 预约记录
+- 正常履约预约状态为 `CHECKED_IN`。
+- 未签到预约状态为 `EXPIRED`。
+- 用户、房间、座位和时间段正确。
 
-浏览器打开：
+### 6.2 违约记录
+
+入口：
 
 ```text
-http://127.0.0.1:8000/admin/reservations/records
+管理首页 -> 违约记录
 ```
 
-筛选：
+核对：
+
+- 能看到该学生的未签到违约。
+- 同一未签到预约只出现一条违约记录。
+
+### 6.3 统计查询
+
+入口：
 
 ```text
-日期范围：2026-04-28 至 2026-04-28
-状态：EXPIRED
+管理首页 -> 统计查询
 ```
 
-验收点：
+核对：
 
-```text
-能看到 NOSHOW_RESERVATION_ID。
-状态为 EXPIRED。
-```
+- 日期范围覆盖本轮验收日期。
+- 统计体现正常履约预约的使用时长。
+- 统计体现未签到流程产生的违约数量。
 
-### 7.2 违约记录
+### 6.4 通知日志核对
 
-浏览器打开：
+也可以通过管理端“通知日志”页面查看日志并手动触发已有内部通知任务。内部任务不会因为创建预约而自动立刻执行，手动验收需要按时间线触发预约前提醒、未签到提醒和自动取消通知。
 
-```text
-http://127.0.0.1:8000/admin/violations
-```
-
-筛选：
-
-```text
-日期范围：2026-04-28 至 2026-04-28
-```
-
-验收点：
-
-```text
-能看到该学生对应的未签到违约记录。
-同一预约只出现一条违约。
-```
-
-### 7.3 使用统计
-
-浏览器打开：
-
-```text
-http://127.0.0.1:8000/admin/statistics
-```
-
-筛选：
-
-```text
-日期范围：2026-04-28 至 2026-04-28
-```
-
-验收点：
-
-```text
-统计中能看到正常履约预约的使用时长。
-统计中能看到未签到流程产生的违约数量。
-```
-
-## 8. 快速数据库核对命令
-
-如果页面结果和预期不一致，可以用下面命令核对真实库。
-
-### 8.1 预约
+如果需要直接查真实通知日志：
 
 ```powershell
-@'
-from sqlalchemy import create_engine, text
-import os
-
-engine = create_engine(os.environ["DATABASE_URL"])
-with engine.connect() as conn:
-    rows = conn.execute(
-        text("""
-            SELECT id, user_id, room_id, seat_id, start_time, end_time, status, created_by
-            FROM reservations
-            ORDER BY id DESC
-            LIMIT 20
-        """)
-    )
-    for row in rows:
-        print(dict(row._mapping))
-'@ | python -
+docker compose exec -T db psql -U spm -d spm -c "SELECT id, reservation_id, notification_type, channel, status, sent_at FROM notification_logs ORDER BY id DESC LIMIT 20;"
 ```
 
-### 8.2 通知
+通过标准：
+
+- `RESERVATION_REMINDER` 对正常履约预约只生成一条。
+- `NO_SHOW_REMINDER` 对未签到预约只生成一条。
+- 如果启用 `smtp_email`，目标邮箱能收到对应邮件。
+- 如果未收到邮件，管理端通知日志能看到对应预约是否没有触发、发送失败或仍使用 `mock` 通道。
+
+## 7. 失败时如何记录
+
+不通过时不要在本指南里修改内容，请打开：
+
+```text
+docs/delivery/manual_scenario_acceptance_record.md
+```
+
+记录方式：
+
+- 通过：点击或改写对应复选框为 `[x]`。
+- 不通过：在“失败截图区”粘贴截图，并写一句现象。
+- 阻塞：在“最终结论”勾选 `BLOCKED`，并把阻塞截图贴到失败截图区。
+
+## 8. 常见问题
+
+### 管理端看不到“院系管理”
+
+通常是本地 PostgreSQL 没有执行最新 migration，或后端没重启。
+
+执行：
 
 ```powershell
-@'
-from sqlalchemy import create_engine, text
-import os
-
-engine = create_engine(os.environ["DATABASE_URL"])
-with engine.connect() as conn:
-    rows = conn.execute(
-        text("""
-            SELECT id, reservation_id, notification_type, channel, status, sent_at
-            FROM notification_logs
-            ORDER BY id DESC
-            LIMIT 20
-        """)
-    )
-    for row in rows:
-        print(dict(row._mapping))
-'@ | python -
+$env:DATABASE_URL='postgresql+psycopg://spm:spm@127.0.0.1:5432/spm'
+alembic upgrade head
 ```
 
-### 8.3 违约
+然后重启后端、退出并重新登录。
 
-```powershell
-@'
-from sqlalchemy import create_engine, text
-import os
+### 页面能打开，但学生看不到院系专属自习室
 
-engine = create_engine(os.environ["DATABASE_URL"])
-with engine.connect() as conn:
-    rows = conn.execute(
-        text("""
-            SELECT id, reservation_id, user_id, violation_type, occurred_at
-            FROM violation_records
-            ORDER BY id DESC
-            LIMIT 20
-        """)
-    )
-    for row in rows:
-        print(dict(row._mapping))
-'@ | python -
-```
+优先检查：
 
-## 9. 最终验收清单
+- 学生账号是否选择了正确院系。
+- 自习室是否选择同一个院系。
+- 自习室是否启用。
+- 座位是否启用。
 
-正常履约流程：
+### 创建预约失败
 
-- 学生可以登录。
-- 学生能看到目标自习室。
-- 学生能看到目标座位可用。
-- 学生能创建预约。
-- 预约前提醒只生成一次。
-- 学生能在有效窗口内签到。
-- 管理端能查到 `CHECKED_IN` 预约。
-- 统计中体现正常使用时长。
+优先检查：
 
-未签到违约流程：
+- 预约日期是否是未来日期。
+- 预约时间是否在自习室开放时间内。
+- 时间是否为 30 分钟粒度，也就是分钟只允许为 `00` 或 `30`。
+- 同一座位同一时间段是否已有未取消预约。
 
-- 学生能创建未签到预约。
-- 未签到提醒只生成一次。
-- 超时任务将预约置为 `EXPIRED`。
-- 违约记录只生成一次。
-- 座位释放后重新可用。
-- 管理端能查到 `EXPIRED` 预约。
-- 管理端能查到违约记录。
-- 统计中体现违约数量。
+### 提醒任务没有发邮件
 
-通知通道：
+优先检查：
 
-- `mock` 模式下通知日志状态为 `SENT`。
-- `smtp_email` 模式下目标用户有邮箱时可以收到邮件。
-- 重复运行同一提醒任务不会重复生成成功通知。
+- `.env` 中 `NOTIFICATION_DEFAULT_CHANNEL` 是否为 `smtp_email`。
+- 学生账号是否填写通知邮箱。
+- QQ 邮箱 SMTP 授权码是否仍有效。
+- 是否已经通过脚本或管理端“通知日志”页面手动触发了对应内部通知任务。
 
-## 10. 常见问题
-
-如果管理端看不到数据：
-
-```text
-先确认你操作的是 PostgreSQL 运行库，而不是自动化测试的 sqlite:///:memory:。
-```
-
-如果提醒任务报目标用户缺少邮箱：
-
-```text
-当前通知通道是 smtp_email，但目标学生没有 users.email。
-可以切换为 mock，或先给学生补 email。
-```
-
-如果 PowerShell 调用学生 API 返回 401：
-
-```text
-重新执行学生登录步骤，刷新 $studentHeaders。
-```
-
-如果创建预约失败：
-
-```text
-检查预约时间是否在自习室开放时间内。
-检查时间是否整点。
-检查该座位同一时间段是否已有 BOOKED 或 CHECKED_IN 预约。
-```
-
-如果管理端统计为空：
-
-```text
-检查统计页面筛选日期是否覆盖预约日期。
-检查正常履约预约是否已经完成签到。
-检查未签到流程是否已经执行超时释放任务。
-```
+如果本轮只验业务流程，可以使用 `mock` 通道，不必强制验证真实邮件。

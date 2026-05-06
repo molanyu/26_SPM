@@ -28,7 +28,7 @@ from app.modules.violation.models.violation_record import (
 )
 
 
-SCENARIO_DAY = datetime(2026, 4, 15)
+SCENARIO_DAY = (datetime.now() + timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
 
 
 def _login_student(client: TestClient, seed_data: dict) -> dict[str, str]:
@@ -165,8 +165,8 @@ def test_scn_01_normal_reservation_lifecycle(client: TestClient, seed_data: dict
     resource_ids = _seed_scenario_resources(seed_data, suffix="01")
     student_headers = _login_student(client, seed_data)
     _login_admin(client, seed_data)
-    start_time = SCENARIO_DAY.replace(hour=10, minute=0)
-    end_time = start_time + timedelta(hours=2)
+    start_time = SCENARIO_DAY.replace(hour=9, minute=30)
+    end_time = start_time + timedelta(hours=1)
 
     rooms_response = client.get("/student/rooms", headers=student_headers)
     assert rooms_response.status_code == 200, "SCN-01 room query failed"
@@ -213,10 +213,9 @@ def test_scn_01_normal_reservation_lifecycle(client: TestClient, seed_data: dict
 
     checkin_now = start_time + timedelta(minutes=5)
     with SessionLocal() as session:
-        code = CodeService(session, settings=client.app.state.settings).ensure_daily_code(
+        code = CodeService(session, settings=client.app.state.settings).get_current_dynamic_code(
             resource_ids["room_id"],
-            code_date=start_time.date(),
-            now=reminder_now,
+            now=checkin_now,
         )
     with SessionLocal() as session:
         student = session.get(User, seed_data["users"]["student"])
@@ -253,7 +252,7 @@ def test_scn_01_normal_reservation_lifecycle(client: TestClient, seed_data: dict
     )
     assert statistics_response.status_code == 200, f"SCN-01 usage statistics failed: {statistics_response.text}"
     overview = statistics_response.json()["overview"]
-    assert overview["total_reserved_minutes"] == 120, "SCN-01 usage statistics did not include checked-in duration"
+    assert overview["total_reserved_minutes"] == 60, "SCN-01 usage statistics did not include checked-in duration"
     assert overview["total_violation_count"] == 0, "SCN-01 usage statistics unexpectedly counted a violation"
 
 

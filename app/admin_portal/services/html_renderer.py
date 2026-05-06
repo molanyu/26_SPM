@@ -85,6 +85,7 @@ def _build_page_context(page_name: str, context: dict[str, object]) -> dict[str,
     builders = {
         "home": _build_home_context,
         "roles": _build_roles_context,
+        "departments": _build_departments_context,
         "user_roles": _build_user_roles_context,
         "user_create": _build_user_create_context,
         "rooms": _build_rooms_context,
@@ -92,8 +93,10 @@ def _build_page_context(page_name: str, context: dict[str, object]) -> dict[str,
         "system_configs": _build_system_configs_context,
         "reservation_records": _build_reservation_records_context,
         "reservation_actions": _build_reservation_actions_context,
+        "checkins": _build_checkins_context,
         "statistics": _build_statistics_context,
         "violations": _build_violations_context,
+        "notifications": _build_notifications_context,
     }
     return builders[page_name](context)
 
@@ -141,6 +144,55 @@ def _build_roles_context(context: dict[str, object]) -> dict[str, object]:
         "target_lookup_value": context["target_lookup_value"],
         "permission_reference_html": _render_permission_reference(permissions),
     }
+
+
+def _build_departments_context(context: dict[str, object]) -> dict[str, object]:
+    create_form = context["create_form"]
+    department_cards_html = "".join(_render_department_card(department) for department in context["departments"])
+    if not department_cards_html:
+        department_cards_html = '<div class="empty-state">当前还没有院系，先从左侧表单创建一个。</div>'
+    return {
+        "department_count": context["department_count"],
+        "active_department_count": context["active_department_count"],
+        "inactive_department_count": context["inactive_department_count"],
+        "create_name": create_form["name"],
+        "create_code": create_form["code"],
+        "create_active_toggle_html": _render_switch_field(
+            "is_active",
+            "创建后立即启用",
+            "启用后会出现在用户创建和院系专属自习室的下拉列表中。",
+            bool(create_form["is_active"]),
+            data_purpose="immediate-activation",
+        ),
+        "department_cards_html": department_cards_html,
+    }
+
+
+def _render_department_card(department: dict[str, object]) -> str:
+    return f"""
+<article class="record-card">
+  <div class="record-main">
+    <div class="record-head">
+      <div>
+        <h4>{escape(str(department['name']))}</h4>
+        <p class="muted"><code>{escape(str(department['code']))}</code></p>
+      </div>
+      <span class="status-badge{' inactive' if not department['is_active'] else ''}">{escape(str(department['status_label']))}</span>
+    </div>
+    <dl class="meta-list">
+      <div><dt>院系 ID</dt><dd>{department['id']}</dd></div>
+      <div><dt>院系编码</dt><dd>{escape(str(department['code']))}</dd></div>
+    </dl>
+  </div>
+  <form method="post" action="/admin/departments/page" class="form-shell form-shell--compact">
+    <input type="hidden" name="form_action" value="{escape(str(department['action']), quote=True)}">
+    <input type="hidden" name="department_id" value="{department['id']}">
+    <div class="form-actions">
+      <button class="{escape(str(department['action_button_class']), quote=True)}" type="submit">{escape(str(department['action_label']))}</button>
+    </div>
+  </form>
+</article>
+"""
 
 
 def _render_permission_options(
@@ -765,13 +817,71 @@ def _render_reservation_result(title: str, payload: dict[str, object] | None) ->
     )
 
 
+def _build_checkins_context(context: dict[str, object]) -> dict[str, object]:
+    selected_room_id = _optional(context.get("selected_room_id"))
+    current_code_html = _render_dynamic_checkin_code(context.get("current_code"))
+    records_html = "".join(
+        f"""
+<tr>
+  <td>{item['checkin_record_id']}</td>
+  <td>{item['reservation_id']}</td>
+  <td>{item['user_id']}<br><span class="muted">{escape(str(item.get('student_no') or '未记录学号'))}</span></td>
+  <td>{item['room_id']}</td>
+  <td>{item['seat_id']}</td>
+  <td><code>{escape(str(item['checkin_method']))}</code></td>
+  <td>{escape(str(item['checkin_at']))}</td>
+</tr>
+"""
+        for item in context["checkin_records"]
+    )
+    if not records_html:
+        records_html = '<tr><td colspan="7" class="muted">当前条件下没有签到记录。</td></tr>'
+    return {
+        "room_options_html": _render_simple_room_options(context["rooms"], selected_room_id),
+        "filter_room_id": selected_room_id,
+        "filter_date_from": _optional(context.get("date_from")),
+        "filter_date_to": _optional(context.get("date_to")),
+        "filter_page": _optional(context.get("page")),
+        "filter_page_size": _optional(context.get("page_size")),
+        "checkin_code_html": current_code_html,
+        "checkin_records_total": context["checkin_total"],
+        "checkin_record_rows_html": records_html,
+    }
+
+
+def _render_dynamic_checkin_code(payload: object) -> str:
+    if not isinstance(payload, dict):
+        return '<p class="muted">请选择自习室查看当前 5 分钟动态签到码状态。</p>'
+    return (
+        f'<div class="result-box">'
+        f'<strong>当前动态签到码</strong>'
+        f'<p>自习室 ID：{escape(str(payload["room_id"]))}</p>'
+        f'<p>动态码：<code>{escape(str(payload["code"]))}</code></p>'
+        f'<p>时间片开始：{escape(str(payload["time_slice_start"]))}</p>'
+        f'<p>有效至：{escape(str(payload["expires_at"]))}</p>'
+        f'<p class="muted">剩余约 {escape(str(payload["remaining_seconds"]))} 秒，服务端会按 5 分钟时间片自动轮换。</p>'
+        f'</div>'
+    )
+
+
+def _render_simple_room_options(rooms: Iterable[dict[str, object]], selected_room_id: str) -> str:
+    options = [f'<option value=""{_selected(selected_room_id == "")}>请选择自习室</option>']
+    for room in rooms:
+        room_id = str(room["id"])
+        options.append(
+            f'<option value="{escape(room_id, quote=True)}"{_selected(room_id == selected_room_id)}>'
+            f'{escape(str(room["name"]))}</option>'
+        )
+    return "".join(options)
+
+
 def _build_violations_context(context: dict[str, object]) -> dict[str, object]:
     filters = context["filters"]
     violation_rows_html = "".join(
         f"""
 <tr>
   <td>{item['violation_id']}</td>
-  <td>{item['user_id']}</td>
+  <td>{item['user_id']}<br><span class="muted">{escape(str(item.get('student_no') or '未记录学号'))}</span></td>
   <td>{item['reservation_id']}</td>
   <td>{item['room_id']}</td>
   <td><code>{escape(str(item['violation_type']))}</code></td>
@@ -784,6 +894,7 @@ def _build_violations_context(context: dict[str, object]) -> dict[str, object]:
         violation_rows_html = '<tr><td colspan="6" class="muted">当前条件下没有查询到违约记录。</td></tr>'
     return {
         "filter_user_id": _optional(filters.get("user_id")),
+        "filter_student_no": _optional(filters.get("student_no")),
         "filter_room_id": _optional(filters.get("room_id")),
         "filter_date_from": _optional(filters.get("date_from")),
         "filter_date_to": _optional(filters.get("date_to")),
@@ -792,6 +903,81 @@ def _build_violations_context(context: dict[str, object]) -> dict[str, object]:
         "violations_total": context["total"],
         "violation_rows_html": violation_rows_html,
     }
+
+
+def _build_notifications_context(context: dict[str, object]) -> dict[str, object]:
+    filters = context["filters"]
+    log_rows_html = "".join(
+        f"""
+<tr>
+  <td>{item['notification_log_id']}</td>
+  <td>{item['reservation_id']}</td>
+  <td>{item['user_id']}</td>
+  <td><code>{escape(str(item['notification_type']))}</code></td>
+  <td>{escape(str(item['channel']))}</td>
+  <td><code>{escape(str(item['status']))}</code></td>
+  <td>{escape(str(item['sent_at']))}</td>
+  <td>{escape(str(item.get('message') or ''))}</td>
+</tr>
+"""
+        for item in context["logs"]
+    )
+    if not log_rows_html:
+        log_rows_html = '<tr><td colspan="8" class="muted">当前条件下没有通知日志。</td></tr>'
+    return {
+        "notification_default_channel": context["notification_default_channel"],
+        "smtp_host": context["smtp_host"],
+        "filter_reservation_id": _optional(filters.get("reservation_id")),
+        "filter_notification_type": _optional(filters.get("notification_type")),
+        "filter_status": _optional(filters.get("status")),
+        "filter_page": _optional(filters.get("page")),
+        "filter_page_size": _optional(filters.get("page_size")),
+        "notification_type_options_html": _render_notification_type_options(_optional(filters.get("notification_type"))),
+        "status_options_html": _render_notification_status_options(_optional(filters.get("status"))),
+        "notification_logs_total": context["total"],
+        "notification_log_rows_html": log_rows_html,
+        "trigger_result_html": _render_notification_trigger_result(context.get("trigger_result")),
+    }
+
+
+def _render_notification_type_options(selected_value: str) -> str:
+    values = [
+        ("", "全部类型"),
+        ("RESERVATION_REMINDER", "预约前提醒"),
+        ("NO_SHOW_REMINDER", "未签到提醒"),
+        ("AUTO_CANCEL_NOTICE", "自动取消通知"),
+    ]
+    return "".join(
+        f'<option value="{escape(value, quote=True)}"{_selected(value == selected_value)}>{escape(label)}</option>'
+        for value, label in values
+    )
+
+
+def _render_notification_status_options(selected_value: str) -> str:
+    values = [
+        ("", "全部状态"),
+        ("PENDING", "PENDING"),
+        ("SENT", "SENT"),
+        ("FAILED", "FAILED"),
+    ]
+    return "".join(
+        f'<option value="{escape(value, quote=True)}"{_selected(value == selected_value)}>{escape(label)}</option>'
+        for value, label in values
+    )
+
+
+def _render_notification_trigger_result(payload: object) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    sent_ids = payload.get("sent_reservation_ids") or []
+    sent_text = ", ".join(str(item) for item in sent_ids) if sent_ids else "无命中预约"
+    return (
+        '<div class="result-box">'
+        f'<strong>最近一次触发：{escape(str(payload["notification_type"]))}</strong>'
+        f'<p>触发时间：{escape(str(payload["triggered_at"]))}</p>'
+        f'<p>命中预约：{escape(sent_text)}</p>'
+        '</div>'
+    )
 
 
 def _checked(value: bool) -> str:

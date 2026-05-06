@@ -204,11 +204,13 @@
 - 单次预约时长不得超过系统参数限制
 - 座位在同一时间段内不允许存在冲突预约
 
-### 3.10 CheckinCode
+### 3.10 CheckinCode（历史兼容）
 
 职责：
 
-- 表示动态签到码
+- 历史兼容或审计用途的签到码记录
+- 当前签到码不得依赖该表作为生成或校验来源
+- 当前签到码由 `checkin` service 基于 `room_id + 5分钟时间片 + 服务端密钥/稳定算法` 派生
 
 关键字段：
 
@@ -221,7 +223,9 @@
 
 约束：
 
-- 同一自习室同一天仅保留一个有效动态码
+- 保留既有字段和约束用于旧数据兼容
+- 新的当前动态码逻辑不要求写入 `CheckinCode`
+- 同一自习室同一 5 分钟时间片内当前码稳定，跨时间片必须变化
 
 ### 3.11 CheckinRecord
 
@@ -314,7 +318,7 @@
 - `User` 1 -> N `Reservation`
 - `Seat` 1 -> N `Reservation`
 - `StudyRoom` 1 -> N `Reservation`
-- `StudyRoom` 1 -> N `CheckinCode`
+- `StudyRoom` 1 -> N `CheckinCode`（历史兼容记录；当前动态码不依赖该关系）
 - `Reservation` 1 -> 0..1 `CheckinRecord`
 - `Reservation` 1 -> 0..1 `ViolationRecord`
 - `Reservation` 1 -> N `NotificationLog`

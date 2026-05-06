@@ -25,6 +25,7 @@ def get_query_service(db: Session = Depends(get_db)) -> QueryService:
 @router.get("/violations")
 def list_violations(
     user_id: int | None = None,
+    student_no: str | None = None,
     room_id: int | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
@@ -34,6 +35,7 @@ def list_violations(
 ):
     filters = ViolationQueryFilters(
         user_id=user_id,
+        student_no=student_no,
         room_id=room_id,
         date_from=date_from,
         date_to=date_to,

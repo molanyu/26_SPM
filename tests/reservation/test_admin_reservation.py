@@ -87,9 +87,15 @@ def _seed_admin_reservation_resources(seed_data: dict) -> dict[str, int]:
         }
 
 
-def _future_slot(*, days: int = 1, start_hour: int = 10, duration_hours: int = 2) -> tuple[datetime, datetime]:
+def _future_slot(
+    *,
+    days: int = 1,
+    start_hour: int = 10,
+    start_minute: int = 0,
+    duration_hours: int = 2,
+) -> tuple[datetime, datetime]:
     base = datetime.now().replace(minute=0, second=0, microsecond=0) + timedelta(days=days)
-    start = base.replace(hour=start_hour)
+    start = base.replace(hour=start_hour, minute=start_minute)
     end = start + timedelta(hours=duration_hours)
     return start, end
 
@@ -146,6 +152,32 @@ def test_admin_can_create_reservation_for_target_student(client: TestClient, see
     assert payload["data"]["created_by"] == "ADMIN"
 
 
+def test_admin_can_create_half_hour_reservation_for_target_student(client: TestClient, seed_data: dict):
+    resource_ids = _seed_admin_reservation_resources(seed_data)
+    _login_admin(
+        client,
+        email=seed_data["credentials"]["admin_email"],
+        password=seed_data["credentials"]["admin_password"],
+    )
+    start_time, end_time = _future_slot(start_hour=9, start_minute=30, duration_hours=1)
+
+    response = client.post(
+        "/admin/reservations",
+        json={
+            "user_id": resource_ids["math_student"],
+            "seat_id": resource_ids["math_seat"],
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["status"] == "BOOKED"
+    assert payload["start_time"] == start_time.isoformat()
+    assert payload["end_time"] == end_time.isoformat()
+
+
 def test_admin_create_reservation_rejects_invalid_request_scenarios(client: TestClient, seed_data: dict):
     resource_ids = _seed_admin_reservation_resources(seed_data)
     _login_admin(
@@ -155,17 +187,30 @@ def test_admin_create_reservation_rejects_invalid_request_scenarios(client: Test
     )
     start_time, end_time = _future_slot(start_hour=10, duration_hours=2)
 
-    non_whole_hour_response = client.post(
+    non_half_hour_response = client.post(
         "/admin/reservations",
         json={
             "user_id": resource_ids["math_student"],
             "seat_id": resource_ids["math_seat"],
-            "start_time": start_time.replace(minute=30).isoformat(),
+            "start_time": start_time.replace(minute=15).isoformat(),
             "end_time": end_time.isoformat(),
         },
     )
-    assert non_whole_hour_response.status_code == 400
-    assert non_whole_hour_response.json()["code"] == "bad_request"
+    assert non_half_hour_response.status_code == 400
+    assert non_half_hour_response.json()["code"] == "bad_request"
+
+    past_start = datetime.now().replace(minute=0, second=0, microsecond=0) - timedelta(hours=2)
+    past_time_response = client.post(
+        "/admin/reservations",
+        json={
+            "user_id": resource_ids["math_student"],
+            "seat_id": resource_ids["math_seat"],
+            "start_time": past_start.isoformat(),
+            "end_time": (past_start + timedelta(hours=1)).isoformat(),
+        },
+    )
+    assert past_time_response.status_code == 400
+    assert past_time_response.json()["code"] == "bad_request"
 
     over_max_hours_response = client.post(
         "/admin/reservations",
