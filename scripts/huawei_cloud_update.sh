@@ -9,6 +9,9 @@ BACKUP_DIR="${BACKUP_DIR:-backups/cloud-db}"
 RESTORE_DB="${RESTORE_DB:-1}"
 RUN_BUILD="${RUN_BUILD:-1}"
 WAIT_SECONDS="${WAIT_SECONDS:-90}"
+PROGRESS_INTERVAL_SECONDS="${PROGRESS_INTERVAL_SECONDS:-15}"
+GIT_RETRIES="${GIT_RETRIES:-5}"
+GIT_RETRY_DELAY_SECONDS="${GIT_RETRY_DELAY_SECONDS:-8}"
 APP_PORT="${APP_PORT:-}"
 POSTGRES_DB="${POSTGRES_DB:-}"
 POSTGRES_USER="${POSTGRES_USER:-}"
@@ -28,7 +31,8 @@ Options:
 
 Environment variables:
   APP_DIR, REMOTE, BRANCH, DB_DUMP_FILE, BACKUP_DIR, RESTORE_DB, RUN_BUILD,
-  WAIT_SECONDS, APP_PORT, POSTGRES_DB, POSTGRES_USER
+  WAIT_SECONDS, PROGRESS_INTERVAL_SECONDS, GIT_RETRIES,
+  GIT_RETRY_DELAY_SECONDS, APP_PORT, POSTGRES_DB, POSTGRES_USER
 
 Examples:
   bash scripts/huawei_cloud_update.sh
@@ -48,6 +52,68 @@ die() {
 
 need_cmd() {
     command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
+}
+
+run_with_heartbeat() {
+    local label="$1"
+    local start_ts elapsed status heartbeat_pid heartbeat_file
+    shift
+
+    start_ts="$(date '+%s')"
+    heartbeat_file="${TMPDIR:-/tmp}/spm_update_heartbeat_$$_${RANDOM}"
+    log "${label} started."
+    : > "$heartbeat_file"
+
+    (
+        while [ -e "$heartbeat_file" ]; do
+            sleep "$PROGRESS_INTERVAL_SECONDS" || exit 0
+            if [ -e "$heartbeat_file" ]; then
+                elapsed=$(($(date '+%s') - start_ts))
+                log "${label} still running (${elapsed}s elapsed)..."
+            fi
+        done
+    ) &
+    heartbeat_pid=$!
+
+    set +e
+    "$@"
+    status=$?
+    set -e
+
+    rm -f "$heartbeat_file"
+    kill "$heartbeat_pid" >/dev/null 2>&1 || true
+    wait "$heartbeat_pid" >/dev/null 2>&1 || true
+
+    elapsed=$(($(date '+%s') - start_ts))
+    if [ "$status" -eq 0 ]; then
+        log "${label} finished (${elapsed}s elapsed)."
+    else
+        log "${label} failed after ${elapsed}s with exit code ${status}."
+    fi
+
+    return "$status"
+}
+
+git_retry() {
+    local attempt=1
+
+    while true; do
+        if run_with_heartbeat "Git attempt ${attempt}/${GIT_RETRIES}: git $*" git \
+            -c http.version=HTTP/1.1 \
+            -c http.lowSpeedLimit=0 \
+            -c http.lowSpeedTime=999999 \
+            "$@"; then
+            return 0
+        fi
+
+        if [ "$attempt" -ge "$GIT_RETRIES" ]; then
+            die "Git command failed after ${GIT_RETRIES} attempts: git $*"
+        fi
+
+        log "Git command failed. Retrying in ${GIT_RETRY_DELAY_SECONDS}s (${attempt}/${GIT_RETRIES})..."
+        attempt=$((attempt + 1))
+        sleep "$GIT_RETRY_DELAY_SECONDS"
+    done
 }
 
 read_env_value() {
@@ -190,11 +256,11 @@ fi
 [ "$BRANCH" != "HEAD" ] || die "Repository is in detached HEAD state; pass --branch explicitly."
 
 log "Updating source code from ${REMOTE}/${BRANCH}..."
-git fetch --prune "$REMOTE"
+git_retry fetch --progress --prune "$REMOTE"
 if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
-    git pull --ff-only --autostash
+    git_retry pull --progress --ff-only --autostash
 else
-    git pull --ff-only --autostash "$REMOTE" "$BRANCH"
+    git_retry pull --progress --ff-only --autostash "$REMOTE" "$BRANCH"
 fi
 
 if [ ! -f ".env" ] && [ -f ".env.example" ]; then
@@ -211,21 +277,21 @@ POSTGRES_USER="${POSTGRES_USER:-spm}"
 
 if [ "$RESTORE_DB" = "1" ] && [ -f "$DB_DUMP_FILE" ]; then
     log "Starting PostgreSQL service before database restore..."
-    docker compose up -d db
+    run_with_heartbeat "Docker Compose start db" docker compose up -d db
     wait_for_db
 
     log "Stopping API before database restore..."
-    docker compose stop api || true
+    run_with_heartbeat "Docker Compose stop api" docker compose stop api || true
 fi
 
 restore_db
 
 if [ "$RUN_BUILD" = "1" ]; then
     log "Building and starting Docker Compose services..."
-    docker compose up -d --build
+    run_with_heartbeat "Docker Compose build and start services" docker compose up -d --build
 else
     log "Starting Docker Compose services without rebuilding..."
-    docker compose up -d
+    run_with_heartbeat "Docker Compose start services" docker compose up -d
 fi
 
 wait_for_db

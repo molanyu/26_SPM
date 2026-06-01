@@ -329,6 +329,7 @@ bash scripts/huawei_cloud_update.sh
 脚本会自动完成：
 
 - 从 GitHub 拉取当前分支最新代码
+- 拉取 GitHub 时显示 Git 原生进度，并每 15 秒打印一次仍在运行提示
 - 启动并等待 PostgreSQL 就绪
 - 停止旧 API，避免导入数据库时仍有旧服务连接
 - 先备份当前云端数据库到 `backups/cloud-db/`
@@ -348,6 +349,13 @@ bash scripts/huawei_cloud_update.sh --skip-db
 
 ```bash
 bash /实际项目目录/scripts/huawei_cloud_update.sh --app-dir /实际项目目录
+```
+
+如果希望进度提示更频繁，例如每 5 秒打印一次：
+
+```bash
+cd /opt/spm
+PROGRESS_INTERVAL_SECONDS=5 bash scripts/huawei_cloud_update.sh
 ```
 
 ## 13. 管理端访问
@@ -485,6 +493,31 @@ Password authentication is not supported for Git operations.
 
 - 用户名输入 GitHub 用户名。
 - 密码位置输入 GitHub token，不是 GitHub 登录密码。
+
+### 15.6 GitHub pull 出现 GnuTLS recv error
+
+错误示例：
+
+```text
+fatal: unable to access 'https://github.com/molanyu/26_SPM.git/': GnuTLS recv error (-110): The TLS connection was non-properly terminated.
+```
+
+这是云服务器到 GitHub 的 HTTPS 连接被中途断开，通常是临时网络抖动或 Git HTTP/2/GnuTLS 兼容性问题。
+
+优先重新执行一键更新脚本。脚本已内置 `git fetch` / `git pull` 重试，并强制 Git 使用 HTTP/1.1。
+
+如果仍失败，可以先在云服务器执行：
+
+```bash
+git config --global http.version HTTP/1.1
+git config --global http.lowSpeedLimit 0
+git config --global http.lowSpeedTime 999999
+
+cd /opt/spm
+bash scripts/huawei_cloud_update.sh
+```
+
+如果连续多次失败，等待几分钟后重试，或把远程地址改为 SSH 方式再拉取。
 
 ## 16. 后续建议
 
