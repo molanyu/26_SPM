@@ -111,7 +111,8 @@ def test_postgres_migrated_app_supports_student_reservation_flow(postgres_client
     assert rooms_response.status_code == 200
     assert any(item["id"] == seed["room_id"] for item in rooms_response.json()["items"])
 
-    current_hour = datetime.now().replace(minute=0, second=0, microsecond=0) + timedelta(days=1)
+    reservation_day = datetime.now().date() + timedelta(days=1)
+    current_hour = datetime.combine(reservation_day, time(10, 0))
     reservation_response = postgres_client.post(
         "/student/reservations",
         headers=headers,
