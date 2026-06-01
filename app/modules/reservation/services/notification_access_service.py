@@ -42,12 +42,11 @@ class NotificationReservationService:
 
     def list_no_show_reminder_candidates(
         self,
-        window_start: datetime,
-        window_end: datetime,
+        cutoff_time: datetime,
     ) -> list[NotificationReservationSnapshot]:
         return [
             self._build_snapshot(row)
-            for row in self.repository.list_booked_starting_between(window_start, window_end)
+            for row in self.repository.list_booked_starting_on_or_before(cutoff_time)
         ]
 
     def list_auto_cancel_notice_candidates(self) -> list[NotificationReservationSnapshot]:

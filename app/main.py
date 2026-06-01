@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -16,6 +17,7 @@ from app.modules.checkin.api.router import router as checkin_router
 from app.modules.identity.api.router import router as identity_router
 from app.modules.identity.services.auth_service import AdminSessionStore
 from app.modules.identity.services.bootstrap_service import BootstrapService
+from app.modules.notification.services.scheduler_service import run_scheduler_loop
 from app.modules.reservation.api.router import router as reservation_router
 from app.modules.resource.api.router import router as resource_router
 from app.modules.system_config.api.router import router as system_config_router
@@ -73,11 +75,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
 
     @asynccontextmanager
-    async def lifespan(_: FastAPI):
+    async def lifespan(fastapi_app: FastAPI):
         if settings.database_auto_create:
             init_database()
         run_identity_bootstrap()
-        yield
+        scheduler_task: asyncio.Task[None] | None = None
+        if settings.task_scheduler_enabled:
+            scheduler_task = asyncio.create_task(run_scheduler_loop(settings=settings))
+            fastapi_app.state.task_scheduler_task = scheduler_task
+        try:
+            yield
+        finally:
+            if scheduler_task is not None:
+                scheduler_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await scheduler_task
 
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
     app.state.settings = settings

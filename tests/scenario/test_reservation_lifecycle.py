@@ -10,15 +10,14 @@ from app.modules.checkin.models.checkin_record import CheckinRecord
 from app.modules.checkin.schemas.checkin import StudentCodeCheckinRequest
 from app.modules.checkin.services.checkin_service import CheckinService
 from app.modules.checkin.services.code_service import CodeService
-from app.modules.checkin.tasks.timeout_release_task import release_expired_reservations
 from app.modules.identity.models.user import User
 from app.modules.notification.models.notification_log import (
+    NOTIFICATION_TYPE_AUTO_CANCEL_NOTICE,
     NOTIFICATION_TYPE_NO_SHOW_REMINDER,
     NOTIFICATION_TYPE_RESERVATION_REMINDER,
     NotificationLog,
 )
-from app.modules.notification.tasks.no_show_reminder_task import send_no_show_reminders
-from app.modules.notification.tasks.reservation_reminder_task import send_reservation_reminders
+from app.modules.notification.services.scheduler_service import tick
 from app.modules.reservation.models.reservation import Reservation
 from app.modules.resource.models.seat import Seat
 from app.modules.resource.models.study_room import StudyRoom
@@ -77,11 +76,21 @@ def _seed_scenario_resources(seed_data: dict, *, suffix: str) -> dict[str, int]:
             has_power_socket=True,
             has_track_socket=False,
         )
-        session.add(seat)
+        second_seat = Seat(
+            room_id=room.id,
+            seat_code=f"SCN-{suffix}-02",
+            seat_label=f"Scenario Second Seat {suffix}",
+            is_active=True,
+            is_window_side=False,
+            has_power_socket=True,
+            has_track_socket=False,
+        )
+        session.add_all([seat, second_seat])
         session.commit()
         return {
             "room_id": room.id,
             "seat_id": seat.id,
+            "second_seat_id": second_seat.id,
         }
 
 
@@ -199,14 +208,12 @@ def test_scn_01_normal_reservation_lifecycle(client: TestClient, seed_data: dict
     )
 
     reminder_now = start_time - timedelta(minutes=15)
-    with SessionLocal() as session:
-        first_reminder = send_reservation_reminders(session, now=reminder_now)
-    with SessionLocal() as session:
-        second_reminder = send_reservation_reminders(session, now=reminder_now)
-    assert first_reminder.sent_reservation_ids == [
+    first_reminder = tick(now=reminder_now)
+    second_reminder = tick(now=reminder_now)
+    assert first_reminder.reservation_reminder_ids == [
         reservation_id,
     ], "SCN-01 reservation reminder did not target the created reservation"
-    assert second_reminder.sent_reservation_ids == [], "SCN-01 reservation reminder was not idempotent"
+    assert second_reminder.reservation_reminder_ids == [], "SCN-01 reservation reminder was not idempotent"
     assert (
         _get_notification_count(reservation_id, NOTIFICATION_TYPE_RESERVATION_REMINDER) == 1
     ), "SCN-01 reservation reminder log count is not idempotent"
@@ -283,28 +290,41 @@ def test_scn_02_no_show_violation_and_seat_release_lifecycle(client: TestClient,
     )
     assert conflicting_response.status_code == 409, "SCN-02 seat was not occupied before timeout release"
 
+    user_overlap_response = client.post(
+        "/student/reservations",
+        headers=student_headers,
+        json={
+            "seat_id": resource_ids["second_seat_id"],
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+        },
+    )
+    assert user_overlap_response.status_code == 409, "SCN-02 same-user overlapping seat was not rejected"
+
     no_show_now = start_time + timedelta(minutes=10)
-    with SessionLocal() as session:
-        first_no_show = send_no_show_reminders(session, now=no_show_now)
-    with SessionLocal() as session:
-        second_no_show = send_no_show_reminders(session, now=no_show_now)
-    assert first_no_show.sent_reservation_ids == [
+    first_no_show = tick(now=no_show_now)
+    second_no_show = tick(now=no_show_now)
+    assert first_no_show.no_show_reminder_ids == [
         reservation_id,
     ], "SCN-02 no-show reminder did not target the created reservation"
-    assert second_no_show.sent_reservation_ids == [], "SCN-02 no-show reminder was not idempotent"
+    assert second_no_show.no_show_reminder_ids == [], "SCN-02 no-show reminder was not idempotent"
     assert (
         _get_notification_count(reservation_id, NOTIFICATION_TYPE_NO_SHOW_REMINDER) == 1
     ), "SCN-02 no-show reminder log count is not idempotent"
 
     release_now = start_time + timedelta(minutes=15)
-    with SessionLocal() as session:
-        first_release = release_expired_reservations(session, now=release_now)
-    with SessionLocal() as session:
-        second_release = release_expired_reservations(session, now=release_now)
+    first_release = tick(now=release_now)
+    second_release = tick(now=release_now)
     assert first_release.expired_reservation_ids == [
         reservation_id,
     ], "SCN-02 timeout release did not expire the created reservation"
     assert second_release.expired_reservation_ids == [], "SCN-02 timeout release was not idempotent"
+    assert first_release.timeout_release_notification_ids == [
+        reservation_id,
+    ], "SCN-02 timeout release notice did not target the created reservation"
+    assert (
+        _get_notification_count(reservation_id, NOTIFICATION_TYPE_AUTO_CANCEL_NOTICE) == 1
+    ), "SCN-02 timeout release notice log count is not idempotent"
     assert _get_reservation_status(reservation_id) == "EXPIRED", "SCN-02 reservation status was not EXPIRED"
     assert _get_violation_count(reservation_id) == 1, "SCN-02 timeout violation count is not idempotent"
 

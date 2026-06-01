@@ -167,13 +167,55 @@ class ReservationRepository:
             select(Reservation)
             .where(
                 Reservation.seat_id == seat_id,
-                Reservation.status == RESERVATION_STATUS_BOOKED,
+                Reservation.status.in_((RESERVATION_STATUS_BOOKED, RESERVATION_STATUS_CHECKED_IN)),
                 Reservation.start_time < end_time,
                 Reservation.end_time > start_time,
             )
             .limit(1)
         )
         return self.session.scalar(statement)
+
+    def get_conflicting_user_reservation(
+        self,
+        user_id: int,
+        start_time: datetime,
+        end_time: datetime,
+    ) -> Reservation | None:
+        statement = (
+            select(Reservation)
+            .where(
+                Reservation.user_id == user_id,
+                Reservation.status.in_((RESERVATION_STATUS_BOOKED, RESERVATION_STATUS_CHECKED_IN)),
+                Reservation.start_time < end_time,
+                Reservation.end_time > start_time,
+            )
+            .limit(1)
+        )
+        return self.session.scalar(statement)
+
+    def list_booked_starting_on_or_before(self, cutoff_time: datetime):
+        statement = (
+            select(
+                Reservation.id,
+                Reservation.user_id,
+                Reservation.room_id,
+                Reservation.seat_id,
+                Reservation.start_time,
+                Reservation.end_time,
+                Reservation.status,
+                StudyRoom.name,
+                Seat.seat_code,
+                Seat.seat_label,
+            )
+            .join(StudyRoom, StudyRoom.id == Reservation.room_id)
+            .join(Seat, Seat.id == Reservation.seat_id)
+            .where(
+                Reservation.status == RESERVATION_STATUS_BOOKED,
+                Reservation.start_time <= cutoff_time,
+            )
+            .order_by(Reservation.start_time.asc(), Reservation.id.asc())
+        )
+        return list(self.session.execute(statement).all())
 
     def list_room_occupied_seats(
         self,

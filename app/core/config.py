@@ -28,6 +28,8 @@ class Settings:
     smtp_from_email: str | None = None
     smtp_use_tls: bool = True
     smtp_timeout_seconds: str = "10"
+    task_scheduler_enabled: bool = False
+    task_scheduler_interval_seconds: int = 60
 
 
 def _read_bool(name: str, default: bool) -> bool:
@@ -61,4 +63,6 @@ def load_settings() -> Settings:
         smtp_from_email=os.getenv("SMTP_FROM_EMAIL"),
         smtp_use_tls=_read_bool("SMTP_USE_TLS", True),
         smtp_timeout_seconds=os.getenv("SMTP_TIMEOUT_SECONDS", "10"),
+        task_scheduler_enabled=_read_bool("TASK_SCHEDULER_ENABLED", False),
+        task_scheduler_interval_seconds=int(os.getenv("TASK_SCHEDULER_INTERVAL_SECONDS", "60")),
     )

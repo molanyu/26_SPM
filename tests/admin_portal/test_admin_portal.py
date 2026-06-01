@@ -1399,7 +1399,7 @@ def test_checkins_page_returns_json_for_invalid_room_id_when_not_html(
     assert payload["details"]
 
 
-def test_notifications_page_lists_logs_and_triggers_tasks(client: TestClient, seed_data: dict) -> None:
+def test_notifications_page_lists_logs_without_manual_task_controls(client: TestClient, seed_data: dict) -> None:
     _login_admin(
         client,
         email=seed_data["credentials"]["admin_email"],
@@ -1438,18 +1438,47 @@ def test_notifications_page_lists_logs_and_triggers_tasks(client: TestClient, se
     assert 'data-template="admin-notifications"' in page.text
     assert str(reservation_id) in page.text
     assert NOTIFICATION_TYPE_RESERVATION_REMINDER in page.text
+    assert "通道状态" in page.text
+    assert "后台调度器" in page.text
+    assert "超时未签到释放通知" in page.text
+    manual_task_label = "手动" + "触发任务"
+    execute_task_label = "执行" + "任务"
+    confusing_cancel_copy = "自动" + "取消"
+    removed_path = "/admin/notifications" + "/page"
+    assert manual_task_label not in page.text
+    assert execute_task_label not in page.text
+    assert confusing_cancel_copy not in page.text
+    assert f'action="{removed_path}"' not in page.text
 
-    trigger = _post_form(
+    removed_entry = _post_form(
         client,
-        "/admin/notifications/page",
+        removed_path,
         {
             "notification_type": "NO_SHOW_REMINDER",
             "now": now.isoformat(timespec="minutes"),
         },
     )
-    assert trigger.status_code == 200
-    assert "通知任务已执行" in trigger.text
-    assert "最近一次触发" in trigger.text
+    assert removed_entry.status_code == 404
+
+
+def test_notifications_page_returns_json_bad_request_for_invalid_numeric_filter(
+    client: TestClient,
+    seed_data: dict,
+) -> None:
+    _login_admin(
+        client,
+        email=seed_data["credentials"]["admin_email"],
+        password=seed_data["credentials"]["admin_password"],
+    )
+
+    response = client.get("/admin/notifications", params={"reservation_id": "abc"})
+
+    assert response.status_code == 400
+    assert response.headers["content-type"].startswith("application/json")
+    payload = response.json()
+    assert payload["code"] == "bad_request"
+    assert "预约 ID 必须是数字。" in payload["message"]
+    assert 'data-template="admin-notifications"' not in response.text
 
 
 def test_violations_page_renders_filtered_html_results(client: TestClient, seed_data: dict) -> None:

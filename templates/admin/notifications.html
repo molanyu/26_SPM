@@ -5,31 +5,10 @@
         <h3>通道状态</h3>
         <p>当前默认通道：<code>{{ notification_default_channel }}</code></p>
         <p class="muted">SMTP 主机：{{ smtp_host }}</p>
+        <p class="muted">后台调度器：{{ task_scheduler_enabled_label }}，间隔 {{ task_scheduler_interval_seconds }} 秒</p>
+        <p class="muted">失败定位请查看下方日志中的状态、发送时间和内容字段。</p>
       </div>
     </div>
-    {{{ trigger_result_html }}}
-  </article>
-
-  <article class="panel">
-    <div class="section-head">
-      <div>
-        <h3>手动触发任务</h3>
-        <p>用于本地手动验收时间推进；不会创建新的调度规则。</p>
-      </div>
-    </div>
-    <form method="post" action="/admin/notifications/page">
-      <div class="fields">
-        <label>任务类型
-          <select name="notification_type">
-            <option value="RESERVATION_REMINDER">预约前提醒</option>
-            <option value="NO_SHOW_REMINDER">未签到提醒</option>
-            <option value="AUTO_CANCEL_NOTICE">自动取消通知</option>
-          </select>
-        </label>
-        <label>触发时间<input type="datetime-local" name="now" placeholder="2026-05-01T09:15"></label>
-      </div>
-      <div class="actions"><button class="secondary" type="submit">执行任务</button></div>
-    </form>
   </article>
 
   <article class="panel">

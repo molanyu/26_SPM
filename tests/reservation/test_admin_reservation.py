@@ -75,7 +75,16 @@ def _seed_admin_reservation_resources(seed_data: dict) -> dict[str, int]:
             has_power_socket=True,
             has_track_socket=True,
         )
-        session.add_all([cs_seat, math_seat])
+        math_second_seat = Seat(
+            room_id=math_room.id,
+            seat_code="E-02",
+            seat_label="Admin Math Second Seat",
+            is_active=True,
+            is_window_side=False,
+            has_power_socket=True,
+            has_track_socket=False,
+        )
+        session.add_all([cs_seat, math_seat, math_second_seat])
         session.commit()
 
         return {
@@ -84,6 +93,7 @@ def _seed_admin_reservation_resources(seed_data: dict) -> dict[str, int]:
             "math_room": math_room.id,
             "cs_seat": cs_seat.id,
             "math_seat": math_seat.id,
+            "math_second_seat": math_second_seat.id,
         }
 
 
@@ -258,6 +268,43 @@ def test_admin_create_reservation_rejects_invalid_request_scenarios(client: Test
     )
     assert conflict_response.status_code == 409
     assert conflict_response.json()["code"] == "conflict"
+
+
+def test_admin_create_reservation_rejects_same_user_overlap_on_different_seat(
+    client: TestClient,
+    seed_data: dict,
+):
+    resource_ids = _seed_admin_reservation_resources(seed_data)
+    _login_admin(
+        client,
+        email=seed_data["credentials"]["admin_email"],
+        password=seed_data["credentials"]["admin_password"],
+    )
+    start_time, end_time = _future_slot(start_hour=10, duration_hours=2)
+
+    first_response = client.post(
+        "/admin/reservations",
+        json={
+            "user_id": resource_ids["math_student"],
+            "seat_id": resource_ids["math_seat"],
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+        },
+    )
+    assert first_response.status_code == 200
+
+    second_response = client.post(
+        "/admin/reservations",
+        json={
+            "user_id": resource_ids["math_student"],
+            "seat_id": resource_ids["math_second_seat"],
+            "start_time": (start_time + timedelta(minutes=30)).isoformat(),
+            "end_time": (end_time + timedelta(minutes=30)).isoformat(),
+        },
+    )
+
+    assert second_response.status_code == 409
+    assert second_response.json()["code"] == "conflict"
 
 
 def test_admin_can_cancel_reservation(client: TestClient, seed_data: dict):

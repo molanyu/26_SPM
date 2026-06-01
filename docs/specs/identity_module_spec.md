@@ -100,7 +100,7 @@
 - 所有可登录用户必须存在 `password_hash`
 - 创建用户时必须提供 `name`
 - 创建学生账号时必须提供 `student_no`
-- 创建学生账号时可选提供 `notification_email`，用于接收预约提醒、未签到提醒和自动取消通知
+- 创建学生账号时可选提供 `notification_email`，用于接收预约提醒、未签到提醒和超时未签到释放通知
 - 创建管理员账号时必须提供 `email`，该字段第一版可使用普通文本账号
 - 学生登录仍只使用 `student_no`，不得因为填写 `notification_email` 而允许学生通过邮箱登录
 - 第一版单个用户创建请求不同时提交 `student_no` 与管理员登录标识 `email`

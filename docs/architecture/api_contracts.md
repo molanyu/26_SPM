@@ -458,19 +458,19 @@
 
 说明：
 
-- 管理端 HTML 请求返回通知日志与任务触发页面
+- 管理端 HTML 请求返回通知日志查询页面
 - 非 HTML/API 请求返回通知日志数据
 
-#### `POST /admin/notifications/page`
+#### 通知后台调度
 
 用途：
 
-- 从管理端页面手动触发已有内部通知任务
+- 由应用后台调度器自动触发预约前提醒、未签到提醒和超时未签到释放通知
 
 说明：
 
-- 仅支持 `RESERVATION_REMINDER`、`NO_SHOW_REMINDER`、`AUTO_CANCEL_NOTICE`
-- 可传入固定 `now`，用于本地手动验收时间推进
+- 管理端不提供手动触发通知任务的页面或表单入口
+- 自动化测试和验收可使用内部 scheduler `tick/run_once` 或 injected now 模拟时间推进
 - 不提供复杂调度、SMTP 配置管理或外部 smoke 自动化
 
 ### 5.7 identity-rbac

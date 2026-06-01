@@ -600,7 +600,6 @@ class AdminPageService:
         page_size: int = 20,
         error_message: str | None = None,
         success_message: str | None = None,
-        trigger_result: dict[str, object] | None = None,
     ) -> dict[str, object]:
         logs = self.admin_notification_service.list_logs(
             reservation_id=reservation_id,
@@ -614,11 +613,13 @@ class AdminPageService:
             current_admin,
             page_title="通知日志",
             page_key="notification.logs",
-            page_intro="查看通知发送记录，并按手动验收时间线触发已有内部通知任务。",
+            page_intro="查看通知发送记录、通道状态和失败原因，后台自动任务由调度器按配置推进。",
             error_message=error_message,
             success_message=success_message,
             notification_default_channel=self.admin_notification_service.settings.notification_default_channel,
             smtp_host=self.admin_notification_service.settings.smtp_host or "",
+            task_scheduler_enabled=self.admin_notification_service.settings.task_scheduler_enabled,
+            task_scheduler_interval_seconds=self.admin_notification_service.settings.task_scheduler_interval_seconds,
             logs=logs.items,
             total=logs.total,
             filters={
@@ -628,7 +629,6 @@ class AdminPageService:
                 "page": page,
                 "page_size": page_size,
             },
-            trigger_result=trigger_result,
         )
 
     def get_statistics_context(

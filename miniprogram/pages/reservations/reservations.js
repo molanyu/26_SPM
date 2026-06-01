@@ -2,6 +2,36 @@ const { request } = require('../../utils/request')
 const session = require('../../utils/session')
 const { formatDateTime } = require('../../utils/format')
 
+function getTimeMs(value) {
+  const time = new Date(value).getTime()
+  return Number.isFinite(time) ? time : 0
+}
+
+function getReservationUiState(item, nowMs) {
+  const startMs = getTimeMs(item.start_time)
+  const endMs = getTimeMs(item.end_time)
+  const isFutureBooked = item.status === 'BOOKED' && startMs > nowMs
+  const isStartedBooked = item.status === 'BOOKED' && startMs <= nowMs && endMs >= nowMs
+
+  if (isFutureBooked) {
+    return { statusLabel: '待开始', canCancel: true }
+  }
+  if (isStartedBooked) {
+    return { statusLabel: '待签到（不可取消）', canCancel: false }
+  }
+
+  const labels = {
+    BOOKED: '待系统释放',
+    CHECKED_IN: '已签到',
+    CANCELLED: '已取消',
+    EXPIRED: '超时未签到（已记违约）',
+  }
+  return {
+    statusLabel: labels[item.status] || item.status || '未知状态',
+    canCancel: false,
+  }
+}
+
 Page({
   data: {
     currentItems: [],
@@ -29,9 +59,16 @@ Page({
         request({ url: '/student/reservations/current' }),
         request({ url: '/student/reservations/history?page=1&page_size=20' }),
       ])
+      const nowMs = Date.now()
+      const currentItems = this.decorateReservations(currentResult.items || [], nowMs)
+      const currentIds = new Set(currentItems.map((item) => String(item.reservation_id)))
+      const historyItems = this.decorateReservations(
+        (historyResult.items || []).filter((item) => !currentIds.has(String(item.reservation_id))),
+        nowMs,
+      )
       this.setData({
-        currentItems: this.decorateReservations(currentResult.items || []),
-        historyItems: this.decorateReservations(historyResult.items || []),
+        currentItems,
+        historyItems,
       })
     } catch (error) {
       wx.showToast({ title: error.message || '加载预约失败', icon: 'none' })
@@ -89,12 +126,12 @@ Page({
     }
   },
 
-  decorateReservations(items) {
+  decorateReservations(items, nowMs = Date.now()) {
     return items.map((item) => ({
       ...item,
       startLabel: formatDateTime(item.start_time),
       endLabel: formatDateTime(item.end_time),
-      canCancel: item.status === 'BOOKED',
+      ...getReservationUiState(item, nowMs),
       canRebook: true,
     }))
   },

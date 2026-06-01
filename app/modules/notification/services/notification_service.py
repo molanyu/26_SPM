@@ -186,7 +186,7 @@ class NotificationService:
         subjects = {
             "RESERVATION_REMINDER": "自习室预约即将开始提醒",
             "NO_SHOW_REMINDER": "自习室预约未签到提醒",
-            "AUTO_CANCEL_NOTICE": "自习室预约自动取消通知",
+            "AUTO_CANCEL_NOTICE": "自习室预约过期释放通知",
         }
         return subjects.get(notification_type, "自习室预约通知")
 

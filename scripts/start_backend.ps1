@@ -157,6 +157,8 @@ try {
     Write-Host "Reload: $(-not $NoReload)"
     Write-Host "DATABASE_URL=$($env:DATABASE_URL)"
     Write-Host "NOTIFICATION_DEFAULT_CHANNEL=$($env:NOTIFICATION_DEFAULT_CHANNEL)"
+    Write-Host "TASK_SCHEDULER_ENABLED=$(if ($env:TASK_SCHEDULER_ENABLED) { $env:TASK_SCHEDULER_ENABLED } else { 'false' })"
+    Write-Host "TASK_SCHEDULER_INTERVAL_SECONDS=$(if ($env:TASK_SCHEDULER_INTERVAL_SECONDS) { $env:TASK_SCHEDULER_INTERVAL_SECONDS } else { '60' })"
 
     if ($DryRun) {
         Write-Host "Dry run enabled, skipping backend launch." -ForegroundColor Yellow

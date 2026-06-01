@@ -314,7 +314,7 @@ $normalReservationId = $normalReservation.data.reservation_id
 $normalReservation.data
 ```
 
-预约前提醒：
+运行调度器 tick，模拟预约前 15 分钟：
 
 ```powershell
 $env:ACCEPTANCE_NOW = "$date`T09:15:00"
@@ -323,15 +323,14 @@ from datetime import datetime
 import os
 
 from app.core.config import load_settings
-from app.core.database import configure_database, SessionLocal
-from app.modules.notification.tasks.reservation_reminder_task import send_reservation_reminders
+from app.core.database import configure_database
+from app.modules.notification.services.scheduler_service import tick
 
 settings = load_settings()
 configure_database(settings.database_url)
 
-with SessionLocal() as session:
-    result = send_reservation_reminders(session, now=datetime.fromisoformat(os.environ["ACCEPTANCE_NOW"]))
-    print(result.sent_reservation_ids)
+result = tick(now=datetime.fromisoformat(os.environ["ACCEPTANCE_NOW"]))
+print(result.reservation_reminder_ids)
 '@ | python -
 ```
 
@@ -431,7 +430,7 @@ $noShowReservationId = $noShowReservation.data.reservation_id
 $noShowReservation.data
 ```
 
-触发未签到提醒：
+运行调度器 tick，模拟预约开始后 10 分钟：
 
 ```powershell
 $env:ACCEPTANCE_NOW = "$date`T14:10:00"
@@ -440,21 +439,20 @@ from datetime import datetime
 import os
 
 from app.core.config import load_settings
-from app.core.database import configure_database, SessionLocal
-from app.modules.notification.tasks.no_show_reminder_task import send_no_show_reminders
+from app.core.database import configure_database
+from app.modules.notification.services.scheduler_service import tick
 
 settings = load_settings()
 configure_database(settings.database_url)
 
-with SessionLocal() as session:
-    result = send_no_show_reminders(session, now=datetime.fromisoformat(os.environ["ACCEPTANCE_NOW"]))
-    print(result.sent_reservation_ids)
+result = tick(now=datetime.fromisoformat(os.environ["ACCEPTANCE_NOW"]))
+print(result.no_show_reminder_ids)
 '@ | python -
 ```
 
 同一命令再执行一次，第二次应输出空列表。
 
-触发超时释放：
+运行调度器 tick，模拟超时释放：
 
 ```powershell
 $env:ACCEPTANCE_NOW = "$date`T14:16:00"
@@ -463,15 +461,17 @@ from datetime import datetime
 import os
 
 from app.core.config import load_settings
-from app.core.database import configure_database, SessionLocal
-from app.modules.checkin.tasks.timeout_release_task import release_expired_reservations
+from app.core.database import configure_database
+from app.modules.notification.services.scheduler_service import tick
 
 settings = load_settings()
 configure_database(settings.database_url)
 
-with SessionLocal() as session:
-    result = release_expired_reservations(session, now=datetime.fromisoformat(os.environ["ACCEPTANCE_NOW"]))
-    print(result.expired_reservation_ids)
+result = tick(now=datetime.fromisoformat(os.environ["ACCEPTANCE_NOW"]))
+print({
+    "expired_reservation_ids": result.expired_reservation_ids,
+    "timeout_release_notification_ids": result.timeout_release_notification_ids,
+})
 '@ | python -
 ```
 
@@ -541,7 +541,7 @@ $releasedSeats.items | Format-Table seat_id, seat_code, status
 
 ### 6.4 通知日志核对
 
-也可以通过管理端“通知日志”页面查看日志并手动触发已有内部通知任务。内部任务不会因为创建预约而自动立刻执行，手动验收需要按时间线触发预约前提醒、未签到提醒和自动取消通知。
+可以通过管理端“通知日志”页面查看日志、通道状态和失败原因。管理端不提供任务执行入口；手动验收如需加速时间线，只能按上文使用 scheduler `tick` 和固定 `ACCEPTANCE_NOW`。
 
 如果需要直接查真实通知日志：
 
@@ -553,6 +553,7 @@ docker compose exec -T db psql -U spm -d spm -c "SELECT id, reservation_id, noti
 
 - `RESERVATION_REMINDER` 对正常履约预约只生成一条。
 - `NO_SHOW_REMINDER` 对未签到预约只生成一条。
+- `AUTO_CANCEL_NOTICE` 对超时未签到释放预约只生成一条，页面和邮件文案应显示为“预约过期释放通知”或“超时未签到释放通知”。
 - 如果启用 `smtp_email`，目标邮箱能收到对应邮件。
 - 如果未收到邮件，管理端通知日志能看到对应预约是否没有触发、发送失败或仍使用 `mock` 通道。
 
@@ -610,6 +611,6 @@ alembic upgrade head
 - `.env` 中 `NOTIFICATION_DEFAULT_CHANNEL` 是否为 `smtp_email`。
 - 学生账号是否填写通知邮箱。
 - QQ 邮箱 SMTP 授权码是否仍有效。
-- 是否已经通过脚本或管理端“通知日志”页面手动触发了对应内部通知任务。
+- 是否已启用 `TASK_SCHEDULER_ENABLED`，或是否已经通过 scheduler `tick` 传入固定时间完成验收模拟。
 
 如果本轮只验业务流程，可以使用 `mock` 通道，不必强制验证真实邮件。

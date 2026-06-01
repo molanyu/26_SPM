@@ -27,8 +27,8 @@
 | US-02 | G2 | `resource` | `GET /student/rooms/{room_id}/seats` | 返回指定自习室座位及状态，支持指定时段查询 | 座位状态查询测试 |
 | US-03 | G4 | `reservation` | `POST /student/reservations` `POST /admin/reservations` | 学生和管理员可以在规则允许范围内创建预约；预约时间支持 30 分钟粒度；过去或已开始时间段必须被拒绝 | 创建预约测试、30 分钟粒度测试、过去时间拒绝测试、冲突测试 |
 | US-04 | G5 | `checkin` `admin_portal` | `POST /student/checkins/code` `POST /student/checkins/qrcode` `GET /admin/checkins` | 已预约用户可在有效时段内使用当前 5 分钟动态码签到；管理端可查看指定自习室当前动态码状态、有效至时间和签到记录，不提供生成签到码动作 | 动态码窗口稳定/轮换测试、动态码签到测试、二维码签到测试、管理端动态码状态页测试 |
-| US-05 | G6 | `notification` `admin_portal` | 内部任务 `GET /admin/notifications` `POST /admin/notifications/page` | 预约开始前 15 分钟触发提醒；启用 `smtp_email` 通道时可真实发送邮件提醒；管理端可查看通知日志并手动触发已有通知任务 | 提醒任务测试、SMTP 通道测试、邮件内容格式测试、通知日志页面测试、手动触发测试 |
-| US-06 | G5 | `checkin` `violation` `notification` `admin_portal` | 内部任务 `GET /admin/violations` `GET /admin/notifications` | 开始后 10 分钟提醒，15 分钟未签到自动取消并生成违约；违约页默认显示全部并支持学生学号/自习室/日期组合筛选；通知日志可解释未收到邮件原因 | 超时释放测试、违约生成测试、违约筛选 UX 测试、SMTP 通道测试、通知日志测试 |
+| US-05 | G6 | `notification` `admin_portal` | 后台调度任务 `GET /admin/notifications` | 预约开始前 15 分钟由后台调度器自动触发提醒；启用 `smtp_email` 通道时可真实发送邮件提醒；管理端只查看通知日志，不提供手动触发任务 | 调度器 tick 测试、提醒任务测试、SMTP 通道测试、邮件内容格式测试、通知日志页面测试 |
+| US-06 | G5 | `checkin` `violation` `notification` `admin_portal` | 后台调度任务 `GET /admin/violations` `GET /admin/notifications` | 开始后 10 分钟由后台调度器自动提醒，15 分钟未签到后系统自动将预约置为过期并释放座位，同时生成违约；违约页默认显示全部并支持学生学号/自习室/日期组合筛选；通知日志可解释未收到邮件原因 | 超时释放调度测试、违约生成测试、违约筛选 UX 测试、SMTP 通道测试、通知日志测试 |
 | US-07 | G2 | `resource` | `GET /student/rooms/{room_id}/seats` | 支持按靠窗和插座筛选座位 | 属性筛选测试 |
 | US-08 | G4 | `reservation` `student_miniprogram` | `GET /student/reservations/current` `GET /student/reservations/history` `POST /student/reservations` | 学生可查看当前有效预约、历史预约并再次预约 | 当前预约查询测试、历史查询测试、再次预约测试 |
 | US-09 | G1 | `identity` `admin_portal` `resource` | `GET /student/me` `GET /student/rooms` `GET /admin/departments` `POST /admin/departments` `POST /admin/departments/{department_id}/activate` `POST /admin/departments/{department_id}/deactivate` | 系统管理员可维护最小院系基础数据；院系用户只能访问对应院系自习室；停用院系不进入用户创建和自习室创建可选列表 | 院系权限测试、院系管理测试、停用院系不可选测试 |

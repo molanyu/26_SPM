@@ -43,8 +43,8 @@ class ReminderService:
 
     def send_reservation_reminders(self, *, now: datetime | None = None) -> ReminderTaskResult:
         current_minute = self._normalize_now(now)
-        window_start = current_minute + timedelta(minutes=15)
-        window_end = window_start + timedelta(minutes=1)
+        window_start = current_minute + timedelta(seconds=1)
+        window_end = current_minute + timedelta(minutes=15, seconds=1)
         candidates = self.reservation_service.list_reservation_reminder_candidates(window_start, window_end)
         return self._send_candidates(
             candidates,
@@ -55,9 +55,8 @@ class ReminderService:
 
     def send_no_show_reminders(self, *, now: datetime | None = None) -> ReminderTaskResult:
         current_minute = self._normalize_now(now)
-        window_start = current_minute - timedelta(minutes=10)
-        window_end = window_start + timedelta(minutes=1)
-        candidates = self.reservation_service.list_no_show_reminder_candidates(window_start, window_end)
+        cutoff_time = current_minute - timedelta(minutes=10)
+        candidates = self.reservation_service.list_no_show_reminder_candidates(cutoff_time)
         return self._send_candidates(
             candidates,
             notification_type=NOTIFICATION_TYPE_NO_SHOW_REMINDER,
@@ -127,7 +126,7 @@ class ReminderService:
 
     def _build_auto_cancel_message(self, reservation: NotificationReservationSnapshot) -> str:
         return (
-            "您的自习室预约已因超时未签到被自动取消，座位已释放。\n"
+            "您的自习室预约已因超时未签到被释放，座位已释放。\n"
             f"预约 ID：{reservation.reservation_id}\n"
             f"自习室：{reservation.room_name}\n"
             f"座位：{self._format_seat(reservation)}\n"

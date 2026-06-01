@@ -127,7 +127,7 @@ class AdminPortalMenuService:
         ShortcutDefinition(
             code="notification.logs",
             label="通知日志",
-            description="查看通知日志，并按验收时间线手动触发已有通知任务。",
+            description="查看通知日志、通道状态和失败原因。",
             href="/admin/notifications",
             required_permissions=(ADMIN_PORTAL_ACCESS,),
         ),

@@ -122,7 +122,7 @@ class ReservationService:
         end_time: datetime,
         created_by: str,
     ) -> Reservation:
-        with self.conflict_service.serialized_seat_write(seat_id):
+        with self.conflict_service.serialized_reservation_write(user_id=target_user.user_id, seat_id=seat_id):
             try:
                 resource = self.resource_access_service.get_reservable_seat_snapshot(
                     seat_id,
@@ -130,6 +130,7 @@ class ReservationService:
                 )
                 self._validate_reservation_window(start_time, end_time, resource)
                 self.conflict_service.ensure_no_conflict(seat_id, start_time, end_time)
+                self.conflict_service.ensure_user_has_no_overlap(target_user.user_id, start_time, end_time)
                 reservation = Reservation(
                     user_id=target_user.user_id,
                     seat_id=resource.seat_id,

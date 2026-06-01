@@ -7,6 +7,7 @@ from threading import Barrier
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
+from sqlalchemy import func, select
 
 from app.core.errors import AppError
 from app.core.database import SessionLocal
@@ -78,6 +79,15 @@ def _seed_reservation_resources(seed_data: dict) -> dict[str, int]:
             has_power_socket=True,
             has_track_socket=False,
         )
+        cs_second_seat = Seat(
+            room_id=cs_room.id,
+            seat_code="A-03",
+            seat_label="CS Second Seat",
+            is_active=True,
+            is_window_side=False,
+            has_power_socket=True,
+            has_track_socket=False,
+        )
         math_seat = Seat(
             room_id=math_room.id,
             seat_code="B-01",
@@ -105,7 +115,7 @@ def _seed_reservation_resources(seed_data: dict) -> dict[str, int]:
             has_power_socket=False,
             has_track_socket=False,
         )
-        session.add_all([cs_seat, math_seat, inactive_seat, inactive_room_seat])
+        session.add_all([cs_seat, cs_second_seat, math_seat, inactive_seat, inactive_room_seat])
         session.commit()
 
         return {
@@ -113,6 +123,7 @@ def _seed_reservation_resources(seed_data: dict) -> dict[str, int]:
             "math_room": math_room.id,
             "inactive_room": inactive_room.id,
             "cs_seat": cs_seat.id,
+            "cs_second_seat": cs_second_seat.id,
             "math_seat": math_seat.id,
             "inactive_seat": inactive_seat.id,
             "inactive_room_seat": inactive_room_seat.id,
@@ -383,6 +394,40 @@ def test_conflicting_reservation_is_rejected(client: TestClient, seed_data: dict
     assert second_response.json()["code"] == "conflict"
 
 
+def test_same_student_overlapping_reservation_on_different_seat_is_rejected(client: TestClient, seed_data: dict):
+    resource_ids = _seed_reservation_resources(seed_data)
+    headers = _login_student(
+        client,
+        student_no=seed_data["credentials"]["student_no"],
+        password=seed_data["credentials"]["student_password"],
+    )
+    start_time, end_time = _future_slot(start_hour=10, duration_hours=2)
+
+    first_response = client.post(
+        "/student/reservations",
+        headers=headers,
+        json={
+            "seat_id": resource_ids["cs_seat"],
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+        },
+    )
+    assert first_response.status_code == 200
+
+    second_response = client.post(
+        "/student/reservations",
+        headers=headers,
+        json={
+            "seat_id": resource_ids["cs_second_seat"],
+            "start_time": (start_time + timedelta(minutes=30)).isoformat(),
+            "end_time": (end_time + timedelta(minutes=30)).isoformat(),
+        },
+    )
+
+    assert second_response.status_code == 409
+    assert second_response.json()["code"] == "conflict"
+
+
 def test_concurrent_student_reservation_writes_reject_overlap(seed_data: dict):
     resource_ids = _seed_reservation_resources(seed_data)
     start_time, end_time = _future_slot(start_hour=10, duration_hours=2)
@@ -414,6 +459,56 @@ def test_concurrent_student_reservation_writes_reject_overlap(seed_data: dict):
 
     assert sum(1 for kind, _ in results if kind == "created") == 1
     assert sum(1 for kind, value in results if kind == "error" and value == "conflict") == 1
+
+
+def test_concurrent_same_user_reservations_on_different_seats_reject_overlap(seed_data: dict):
+    resource_ids = _seed_reservation_resources(seed_data)
+    start_time, end_time = _future_slot(start_hour=10, duration_hours=2)
+    student = SimpleNamespace(
+        id=seed_data["users"]["student"],
+        department_id=seed_data["departments"]["cs"],
+    )
+    barrier = Barrier(2)
+
+    def attempt_create(seat_id: int) -> tuple[str, int | str]:
+        session = SessionLocal()
+        service = ReservationService(session)
+        payload = StudentReservationCreateRequest(
+            seat_id=seat_id,
+            start_time=start_time,
+            end_time=end_time,
+        )
+        barrier.wait()
+        try:
+            reservation = service.create_student_reservation(student, payload)
+            return ("created", reservation.id)
+        except AppError as exc:
+            return ("error", exc.code)
+        finally:
+            session.close()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(attempt_create, [resource_ids["cs_seat"], resource_ids["cs_second_seat"]]))
+
+    assert sum(1 for kind, _ in results if kind == "created") == 1
+    assert sum(1 for kind, value in results if kind == "error" and value == "conflict") == 1
+
+    with SessionLocal() as session:
+        active_overlap_count = int(
+            session.scalar(
+                select(func.count())
+                .select_from(Reservation)
+                .where(
+                    Reservation.user_id == seed_data["users"]["student"],
+                    Reservation.status.in_((RESERVATION_STATUS_BOOKED, RESERVATION_STATUS_CHECKED_IN)),
+                    Reservation.start_time < end_time,
+                    Reservation.end_time > start_time,
+                )
+            )
+            or 0,
+        )
+
+    assert active_overlap_count == 1
 
 
 def test_student_can_query_history_and_cancel_before_start(client: TestClient, seed_data: dict):
@@ -603,4 +698,16 @@ def test_miniprogram_history_page_keeps_rebook_entry_visible_for_all_history_ite
     assert 'bindtap="rebookReservation"' in reservations_wxml
     assert 'data-seat-id="{{item.seat_id}}"' in reservations_wxml
     assert "canRebook: true" in reservations_js
-    assert "Date.now()" not in reservations_js
+    assert "historyItems = this.decorateReservations" in reservations_js
+    assert "!currentIds.has(String(item.reservation_id))" in reservations_js
+
+
+def test_miniprogram_reservation_page_hides_cancel_for_started_booked_reservation() -> None:
+    reservations_js = MINIPROGRAM_RESERVATIONS_JS.read_text(encoding="utf-8")
+    reservations_wxml = MINIPROGRAM_RESERVATIONS_WXML.read_text(encoding="utf-8")
+
+    assert "startMs > nowMs" in reservations_js
+    assert "item.status === 'BOOKED' && startMs <= nowMs && endMs >= nowMs" in reservations_js
+    assert "待签到（不可取消）" in reservations_js
+    assert "超时未签到（已记违约）" in reservations_js
+    assert "状态：{{item.statusLabel}}" in reservations_wxml

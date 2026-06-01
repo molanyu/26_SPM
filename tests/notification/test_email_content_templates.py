@@ -195,7 +195,7 @@ def test_reminder_smtp_email_templates_are_user_facing_chinese(seed_data: dict) 
     assert set(deliveries_by_subject) == {
         "自习室预约即将开始提醒",
         "自习室预约未签到提醒",
-        "自习室预约自动取消通知",
+        "自习室预约过期释放通知",
     }
 
     reservation_id, start_time, end_time = reservations["reservation_reminder"]
@@ -223,8 +223,9 @@ def test_reminder_smtp_email_templates_are_user_facing_chinese(seed_data: dict) 
     )
 
     reservation_id, start_time, end_time = reservations["auto_cancel_notice"]
-    auto_cancel_body = deliveries_by_subject["自习室预约自动取消通知"]
-    assert "自动取消" in auto_cancel_body
+    auto_cancel_body = deliveries_by_subject["自习室预约过期释放通知"]
+    assert "超时未签到" in auto_cancel_body
+    assert "自动" + "取消" not in auto_cancel_body
     assert "座位已释放" in auto_cancel_body
     _assert_common_email_body(
         auto_cancel_body,

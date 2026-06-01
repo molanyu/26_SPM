@@ -936,7 +936,8 @@ def _build_notifications_context(context: dict[str, object]) -> dict[str, object
         "status_options_html": _render_notification_status_options(_optional(filters.get("status"))),
         "notification_logs_total": context["total"],
         "notification_log_rows_html": log_rows_html,
-        "trigger_result_html": _render_notification_trigger_result(context.get("trigger_result")),
+        "task_scheduler_enabled_label": "已启用" if context["task_scheduler_enabled"] else "已关闭",
+        "task_scheduler_interval_seconds": context["task_scheduler_interval_seconds"],
     }
 
 
@@ -945,7 +946,7 @@ def _render_notification_type_options(selected_value: str) -> str:
         ("", "全部类型"),
         ("RESERVATION_REMINDER", "预约前提醒"),
         ("NO_SHOW_REMINDER", "未签到提醒"),
-        ("AUTO_CANCEL_NOTICE", "自动取消通知"),
+        ("AUTO_CANCEL_NOTICE", "超时未签到释放通知"),
     ]
     return "".join(
         f'<option value="{escape(value, quote=True)}"{_selected(value == selected_value)}>{escape(label)}</option>'
@@ -964,21 +965,6 @@ def _render_notification_status_options(selected_value: str) -> str:
         f'<option value="{escape(value, quote=True)}"{_selected(value == selected_value)}>{escape(label)}</option>'
         for value, label in values
     )
-
-
-def _render_notification_trigger_result(payload: object) -> str:
-    if not isinstance(payload, dict):
-        return ""
-    sent_ids = payload.get("sent_reservation_ids") or []
-    sent_text = ", ".join(str(item) for item in sent_ids) if sent_ids else "无命中预约"
-    return (
-        '<div class="result-box">'
-        f'<strong>最近一次触发：{escape(str(payload["notification_type"]))}</strong>'
-        f'<p>触发时间：{escape(str(payload["triggered_at"]))}</p>'
-        f'<p>命中预约：{escape(sent_text)}</p>'
-        '</div>'
-    )
-
 
 def _checked(value: bool) -> str:
     return " checked" if value else ""

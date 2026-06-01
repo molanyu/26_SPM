@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base, TimestampMixin
@@ -32,6 +32,8 @@ class Reservation(TimestampMixin, Base):
             "cancelled_by IS NULL OR cancelled_by IN ('STUDENT', 'ADMIN')",
             name="ck_reservations_cancelled_by",
         ),
+        Index("ix_reservations_user_status_time", "user_id", "status", "start_time", "end_time"),
+        Index("ix_reservations_seat_status_time", "seat_id", "status", "start_time", "end_time"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

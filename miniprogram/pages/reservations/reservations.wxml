@@ -14,9 +14,9 @@
     <view class="section-title">当前有效预约</view>
     <view wx:if="{{loading}}" class="empty">加载中...</view>
     <view wx:elif="{{!currentItems.length}}" class="empty">当前没有有效预约</view>
-    <view wx:for="{{currentItems}}" wx:key="reservation_id" class="card">
+      <view wx:for="{{currentItems}}" wx:key="reservation_id" class="card">
       <view class="item-title">预约 #{{item.reservation_id}}</view>
-      <view class="item-meta">状态：{{item.status}}</view>
+      <view class="item-meta">状态：{{item.statusLabel}}</view>
       <view class="item-meta">房间：{{item.room_id}} / 座位：{{item.seat_id}}</view>
       <view class="item-meta">开始：{{item.startLabel}}</view>
       <view class="item-meta">结束：{{item.endLabel}}</view>
@@ -32,11 +32,11 @@
   </view>
 
   <view class="card">
-    <view class="section-title">历史预约</view>
+    <view class="section-title">历史预约（不含当前）</view>
     <view wx:if="{{!historyItems.length}}" class="empty">暂无历史预约</view>
     <view wx:for="{{historyItems}}" wx:key="reservation_id" class="card">
       <view class="item-title">预约 #{{item.reservation_id}}</view>
-      <view class="item-meta">状态：{{item.status}}</view>
+      <view class="item-meta">状态：{{item.statusLabel}}</view>
       <view class="item-meta">房间：{{item.room_id}} / 座位：{{item.seat_id}}</view>
       <view class="item-meta">开始：{{item.startLabel}}</view>
       <view class="item-meta">结束：{{item.endLabel}}</view>
