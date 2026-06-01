@@ -96,15 +96,31 @@ run_with_heartbeat() {
 
 git_retry() {
     local attempt=1
+    local status git_log
 
     while true; do
-        if run_with_heartbeat "Git attempt ${attempt}/${GIT_RETRIES}: git $*" git \
+        git_log="${TMPDIR:-/tmp}/spm_update_git_$$_${RANDOM}.log"
+
+        set +e
+        run_with_heartbeat "Git attempt ${attempt}/${GIT_RETRIES}: git $*" git \
             -c http.version=HTTP/1.1 \
             -c http.lowSpeedLimit=0 \
             -c http.lowSpeedTime=999999 \
-            "$@"; then
+            "$@" 2> >(tee "$git_log" >&2)
+        status=$?
+        set -e
+
+        if [ "$status" -eq 0 ]; then
+            rm -f "$git_log"
             return 0
         fi
+
+        if grep -Eqi "Authentication failed|Invalid username or token|Password authentication is not supported|Repository not found" "$git_log"; then
+            rm -f "$git_log"
+            die "Git authentication failed. Create or paste a valid GitHub token, then run this script again."
+        fi
+
+        rm -f "$git_log"
 
         if [ "$attempt" -ge "$GIT_RETRIES" ]; then
             die "Git command failed after ${GIT_RETRIES} attempts: git $*"

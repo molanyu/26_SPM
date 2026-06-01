@@ -489,10 +489,32 @@ docker compose restart api
 Password authentication is not supported for Git operations.
 ```
 
+或：
+
+```text
+remote: Invalid username or token. Password authentication is not supported for Git operations.
+fatal: Authentication failed for 'https://github.com/molanyu/26_SPM.git/'
+```
+
 处理方式：
 
 - 用户名输入 GitHub 用户名。
 - 密码位置输入 GitHub token，不是 GitHub 登录密码。
+- 如果希望一键更新脚本不再反复询问账号密码，可以在云服务器执行：
+
+```bash
+git config --global credential.helper store
+cd /opt/spm
+git fetch --progress origin
+```
+
+提示用户名时输入 GitHub 用户名，提示密码时粘贴 GitHub token。成功后 token 会保存在服务器用户的 `~/.git-credentials`，后续 `bash scripts/huawei_cloud_update.sh` 可自动拉取。
+
+如果之前输错过 token，先清理旧凭据：
+
+```bash
+printf "protocol=https\nhost=github.com\nusername=molanyu\n\n" | git credential reject
+```
 
 ### 15.6 GitHub pull 出现 GnuTLS recv error
 
