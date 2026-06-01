@@ -317,6 +317,39 @@ docker compose restart api
 - 云端第一次启动时数据库是空库，直接使用 `admin / admin` 可能登录失败。
 - 恢复 `dataset/spm_postgres_dump.sql` 后，才会拥有本地数据库中的管理员、学生、院系、自习室等数据。
 
+## 12.1 后续一键更新脚本
+
+后续本地代码和 `dataset/spm_postgres_dump.sql` 已经提交并推送到 GitHub 后，云服务器只需要执行：
+
+```bash
+cd /opt/spm
+bash scripts/huawei_cloud_update.sh
+```
+
+脚本会自动完成：
+
+- 从 GitHub 拉取当前分支最新代码
+- 启动并等待 PostgreSQL 就绪
+- 停止旧 API，避免导入数据库时仍有旧服务连接
+- 先备份当前云端数据库到 `backups/cloud-db/`
+- 自动导入 `dataset/spm_postgres_dump.sql`
+- 重新构建并启动 Docker Compose 服务
+- 检查 `/health`
+- 打印容器状态和最近 API 日志
+
+如果本次只更新代码，不想覆盖云端数据库：
+
+```bash
+cd /opt/spm
+bash scripts/huawei_cloud_update.sh --skip-db
+```
+
+如果服务器项目目录不是 `/opt/spm`：
+
+```bash
+bash /实际项目目录/scripts/huawei_cloud_update.sh --app-dir /实际项目目录
+```
+
 ## 13. 管理端访问
 
 临时调试访问：

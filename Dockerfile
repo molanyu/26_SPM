@@ -5,6 +5,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+
 COPY pyproject.toml ./pyproject.toml
 COPY alembic.ini ./alembic.ini
 COPY alembic ./alembic
@@ -12,8 +14,8 @@ COPY app ./app
 COPY templates ./templates
 COPY run_tests.py ./run_tests.py
 
-RUN python -m pip install --upgrade pip && \
-    python -m pip install .
+RUN python -m pip install -i "${PIP_INDEX_URL}" --upgrade pip && \
+    python -m pip install -i "${PIP_INDEX_URL}" .
 
 EXPOSE 8000
 
