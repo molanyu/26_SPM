@@ -541,6 +541,31 @@ bash scripts/huawei_cloud_update.sh
 
 如果连续多次失败，等待几分钟后重试，或把远程地址改为 SSH 方式再拉取。
 
+SSH 方式可以绕开 HTTPS/GnuTLS。云服务器执行：
+
+```bash
+ssh-keygen -t ed25519 -C "huawei-flexus-spm" -f ~/.ssh/id_ed25519 -N ""
+cat ~/.ssh/id_ed25519.pub
+```
+
+复制输出的公钥，到 GitHub 仓库：
+
+```text
+molanyu/26_SPM -> Settings -> Deploy keys -> Add deploy key
+```
+
+只拉取代码时不需要勾选 `Allow write access`。
+
+然后回到云服务器执行：
+
+```bash
+ssh-keyscan github.com >> ~/.ssh/known_hosts
+cd /opt/spm
+git remote set-url origin git@github.com:molanyu/26_SPM.git
+git fetch --progress origin
+bash scripts/huawei_cloud_update.sh
+```
+
 ## 16. 后续建议
 
 当前流程已经满足课程演示和云端调试。

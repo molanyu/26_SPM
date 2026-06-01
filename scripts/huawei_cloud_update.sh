@@ -12,6 +12,7 @@ WAIT_SECONDS="${WAIT_SECONDS:-90}"
 PROGRESS_INTERVAL_SECONDS="${PROGRESS_INTERVAL_SECONDS:-15}"
 GIT_RETRIES="${GIT_RETRIES:-5}"
 GIT_RETRY_DELAY_SECONDS="${GIT_RETRY_DELAY_SECONDS:-8}"
+GIT_TIMEOUT_SECONDS="${GIT_TIMEOUT_SECONDS:-300}"
 APP_PORT="${APP_PORT:-}"
 POSTGRES_DB="${POSTGRES_DB:-}"
 POSTGRES_USER="${POSTGRES_USER:-}"
@@ -32,7 +33,8 @@ Options:
 Environment variables:
   APP_DIR, REMOTE, BRANCH, DB_DUMP_FILE, BACKUP_DIR, RESTORE_DB, RUN_BUILD,
   WAIT_SECONDS, PROGRESS_INTERVAL_SECONDS, GIT_RETRIES,
-  GIT_RETRY_DELAY_SECONDS, APP_PORT, POSTGRES_DB, POSTGRES_USER
+  GIT_RETRY_DELAY_SECONDS, GIT_TIMEOUT_SECONDS, APP_PORT,
+  POSTGRES_DB, POSTGRES_USER
 
 Examples:
   bash scripts/huawei_cloud_update.sh
@@ -96,17 +98,25 @@ run_with_heartbeat() {
 
 git_retry() {
     local attempt=1
-    local status git_log
+    local status git_log network_hint=0
 
     while true; do
         git_log="${TMPDIR:-/tmp}/spm_update_git_$$_${RANDOM}.log"
 
         set +e
-        run_with_heartbeat "Git attempt ${attempt}/${GIT_RETRIES}: git $*" git \
-            -c http.version=HTTP/1.1 \
-            -c http.lowSpeedLimit=0 \
-            -c http.lowSpeedTime=999999 \
-            "$@" 2> >(tee "$git_log" >&2)
+        if command -v timeout >/dev/null 2>&1; then
+            run_with_heartbeat "Git attempt ${attempt}/${GIT_RETRIES}: git $*" timeout "$GIT_TIMEOUT_SECONDS" git \
+                -c http.version=HTTP/1.1 \
+                -c http.lowSpeedLimit=0 \
+                -c http.lowSpeedTime=999999 \
+                "$@" 2> >(tee "$git_log" >&2)
+        else
+            run_with_heartbeat "Git attempt ${attempt}/${GIT_RETRIES}: git $*" git \
+                -c http.version=HTTP/1.1 \
+                -c http.lowSpeedLimit=0 \
+                -c http.lowSpeedTime=999999 \
+                "$@" 2> >(tee "$git_log" >&2)
+        fi
         status=$?
         set -e
 
@@ -120,9 +130,22 @@ git_retry() {
             die "Git authentication failed. Create or paste a valid GitHub token, then run this script again."
         fi
 
+        if [ "$status" -eq 124 ]; then
+            network_hint=1
+            log "Git command timed out after ${GIT_TIMEOUT_SECONDS}s."
+        fi
+
+        if grep -Eqi "GnuTLS recv error|TLS connection|Failed to connect|Connection timed out|Connection reset|Could not resolve host" "$git_log"; then
+            network_hint=1
+            log "Git network/TLS issue detected. HTTPS access to GitHub may be unstable from this cloud server."
+        fi
+
         rm -f "$git_log"
 
         if [ "$attempt" -ge "$GIT_RETRIES" ]; then
+            if [ "$network_hint" -eq 1 ]; then
+                die "Git command failed after ${GIT_RETRIES} attempts because of network/TLS errors. Consider switching origin to SSH: git@github.com:molanyu/26_SPM.git"
+            fi
             die "Git command failed after ${GIT_RETRIES} attempts: git $*"
         fi
 
