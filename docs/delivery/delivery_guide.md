@@ -63,6 +63,34 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_postgres_acceptance.ps1 -
 
 - `docs/delivery/postgresql_acceptance.md`
 
+### 2.3 提交前同步 PostgreSQL 数据快照
+
+如果本地使用 Docker PostgreSQL，并且希望云端更新时同步当前本地数据，提交代码前先执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\export_postgres_dump.ps1
+```
+
+脚本会从当前 Docker Compose 的 `db` 容器导出 PostgreSQL 数据，覆盖更新：
+
+```text
+dataset/spm_postgres_dump.sql
+```
+
+然后再提交并推送：
+
+```powershell
+git add dataset\spm_postgres_dump.sql
+git commit -m "Update PostgreSQL dataset dump"
+git push
+```
+
+如果希望脚本导出后顺手暂存 dump 文件：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\export_postgres_dump.ps1 -GitAdd
+```
+
 ## 3. 容器启动
 
 华为云 Flexus 云服务器的完整已验证部署流程见：
