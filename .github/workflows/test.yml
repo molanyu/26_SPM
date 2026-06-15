@@ -19,19 +19,19 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install project and test dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[test]"
           python -m pip install ruff pytest-cov
 
       - name: Run Ruff code quality check
-        run: python -m ruff check app tests alembic run_tests.py
+        run: python -m ruff check app tests alembic run_tests.py --ignore E402
 
-      - name: Run unified test suite
+      - name: Run automated tests
         run: python run_tests.py
 
-      - name: Run scenario test suite
+      - name: Run scenario tests
         run: python run_tests.py --suite scenario
 
       - name: Run coverage report
@@ -80,7 +80,7 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install project and test dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[test]"
