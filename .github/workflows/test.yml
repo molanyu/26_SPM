@@ -3,9 +3,11 @@ name: Tests
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 jobs:
-  test:
+  ci:
+    name: Lint, Test, Coverage and Build
     runs-on: ubuntu-latest
 
     steps:
@@ -20,13 +22,36 @@ jobs:
       - name: Install project and test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e .[test]
+          python -m pip install -e ".[test]"
+          python -m pip install ruff pytest-cov
+
+      - name: Run Ruff code quality check
+        run: python -m ruff check app tests alembic run_tests.py
 
       - name: Run unified test suite
         run: python run_tests.py
 
+      - name: Run scenario test suite
+        run: python run_tests.py --suite scenario
+
+      - name: Run coverage report
+        run: |
+          python -m pytest \
+            -q \
+            -p no:cacheprovider \
+            --ignore=tests/postgres \
+            --cov=app \
+            --cov-report=term-missing \
+            --cov-fail-under=85 \
+            tests
+
+      - name: Verify Docker image build
+        run: docker build -t spm-api:${{ github.sha }} .
+
   postgres-smoke:
+    name: PostgreSQL Migration and Smoke Test
     runs-on: ubuntu-latest
+
     services:
       postgres:
         image: postgres:16
@@ -41,9 +66,11 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+
     env:
       DATABASE_URL: postgresql+psycopg://spm:spm@127.0.0.1:5432/spm
       POSTGRES_REGRESSION_URL: postgresql+psycopg://spm:spm@127.0.0.1:5432/spm
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -56,7 +83,7 @@ jobs:
       - name: Install project and test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e .[test]
+          python -m pip install -e ".[test]"
 
       - name: Apply Alembic migrations
         run: alembic upgrade head
