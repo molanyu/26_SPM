@@ -273,10 +273,12 @@
 - `reservation` -> `identity`
 - `reservation` -> `resource`
 - `reservation` -> `system_config`
+- `reservation` -> `violation`（仅限公开只读 service，用于预约前惩罚资格判断）
 - `checkin` -> `reservation`
 - `checkin` -> `resource`
 - `checkin` -> `system_config`
 - `violation` -> `reservation`
+- `violation` -> `system_config`
 - `notification` -> `reservation`
 - `notification` -> `checkin`
 - `notification` -> `violation`
@@ -298,6 +300,8 @@
 - 只能通过对方模块的 service 层进入
 - 不允许直接调用对方 repository
 - 不允许直接修改对方 model 状态
+- `reservation` 读取 `violation` 时只能消费惩罚资格公开只读 service，不得生成或修改违约记录
+- `violation` 读取 `system_config` 时只能通过公开配置读取 service 获取违约累计与惩罚参数
 
 ## 7. 业务主线
 

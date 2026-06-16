@@ -91,7 +91,7 @@
 
 用途：
 
-- 查询指定自习室的座位及状态
+- 查询指定自习室的座位及资源侧状态
 
 输入参数：
 
@@ -110,6 +110,11 @@
 - `is_window_side`
 - `has_power_socket`
 - `has_track_socket`
+
+说明：
+
+- `status` 只表示资源侧状态，不表示指定时段内是否已有预约占用
+- 指定时段最终可用状态由 `reservation` 的座位可用状态查询契约提供
 
 ### 4.3 reservation
 
@@ -138,6 +143,44 @@
 - `room_id`
 - `start_time`
 - `end_time`
+
+#### `GET /student/rooms/{room_id}/seat-availability`
+
+用途：
+
+- 查询指定自习室在指定时段内的座位最终可用状态
+
+规则：
+
+- 该接口由 `reservation` 模块编排
+- 资源基础信息、可见性、开放时间和座位属性由 `resource` 公开 service 提供
+- 预约占用状态由 `reservation` 基于 `BOOKED` / `CHECKED_IN` 且时间区间重叠的预约记录计算
+- `CANCELLED` 和 `EXPIRED` 预约不得计入占用
+- 查询、筛选和重叠判断必须在数据库层完成
+
+输入参数：
+
+- `date`
+- `start_time`
+- `end_time`
+- `is_window_side`
+- `has_power_socket`
+- `has_track_socket`
+
+返回核心字段：
+
+- `seat_id`
+- `seat_code`
+- `seat_label`
+- `status`
+- `is_window_side`
+- `has_power_socket`
+- `has_track_socket`
+
+说明：
+
+- `status` 表示指定时段最终状态，至少包含 `AVAILABLE` 和 `OCCUPIED`
+- 该接口不改变预约或资源状态
 
 #### `GET /student/reservations/current`
 

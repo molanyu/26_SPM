@@ -51,6 +51,26 @@
 
 如果后续模块需要新增配置项，必须先更新相关 spec，再修改代码。
 
+### 2.1.1 默认值与初始化规则
+
+首批配置项必须在系统初始化、测试 seed 或迁移初始化流程中保证存在，默认值固定如下：
+
+| config_key | value_type | 默认值 |
+| --- | --- | --- |
+| `max_reservation_hours` | `int` | `4` |
+| `checkin_grace_minutes` | `int` | `10` |
+| `violation_threshold_minutes` | `int` | `15` |
+| `violation_penalty_threshold_count` | `int` | `3` |
+| `violation_penalty_window_days` | `int` | `30` |
+| `violation_penalty_duration_days` | `int` | `7` |
+
+初始化规则：
+
+- 数据库初始化或测试 seed 必须幂等创建缺失的首批配置项
+- 已存在配置项不得被初始化流程覆盖
+- 新增首批配置项时，必须同步更新初始化逻辑、配置读取 service 和测试 fixture
+- 不允许业务模块在读取失败时私自使用硬编码默认值绕过 `system_config`
+
 ### 2.2 配置模块边界
 
 - `system_config` 只负责配置值的存储、读取和更新
@@ -81,6 +101,8 @@
 - 其他模块只能通过 `system_config` 的公开 service 读取配置
 - 不允许其他模块直接依赖 `system_config` 的 repository
 - 不允许在业务模块中硬编码首批配置项的默认业务规则
+- 首批配置项缺失时，配置读取 service 必须返回受控配置错误，不得静默返回 `None` 或临时默认值
+- 配置值存在但类型转换失败时，配置读取 service 必须返回受控配置错误
 
 ### 3.4 首批配置项校验规则
 
@@ -199,6 +221,8 @@ app/modules/system_config/api/admin_system_config.py
 - 管理员可更新 `violation_penalty_threshold_count`
 - 管理员可更新 `violation_penalty_window_days`
 - 管理员可更新 `violation_penalty_duration_days`
+- 初始化流程会幂等创建全部首批配置项
+- 初始化流程不会覆盖已经存在的配置值
 - 未认证访问系统参数接口失败
 - 无权限访问系统参数接口失败
 - 非法 `config_key` 更新失败
@@ -206,6 +230,8 @@ app/modules/system_config/api/admin_system_config.py
 - 非法范围更新失败
 - `violation_threshold_minutes < checkin_grace_minutes` 更新失败
 - 惩罚相关配置项为 0 或负数时更新失败
+- 缺失首批配置项时，配置读取 service 返回受控配置错误
+- 首批配置项类型转换失败时，配置读取 service 返回受控配置错误
 - 其他模块可通过公开 service 读取配置值
 
 ## 11. 完成标准

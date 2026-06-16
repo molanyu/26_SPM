@@ -225,6 +225,12 @@ app/modules/violation/api/admin_violation.py
 - 按 `room_id` 过滤违约记录
 - 按时间范围过滤违约记录
 - 无筛选条件时默认返回全部违约记录
+- `get_user_penalty_status` 在未达到阈值时返回 `is_penalized=false`
+- `get_user_penalty_status` 在达到阈值且惩罚期限未过时返回 `is_penalized=true`
+- `get_user_penalty_status` 在达到阈值但惩罚期限已过时返回 `is_penalized=false`
+- `get_user_penalty_status` 不重复统计同一 `reservation_id` 的同类型违约
+- `get_user_penalty_status` 通过 `system_config` 公开 service 读取惩罚阈值、累计窗口和惩罚期限
+- `get_user_penalty_status` 查询过程不得修改 `Reservation`、`ViolationRecord` 或用户数据
 - 未认证访问违约接口失败
 - 无权限访问违约接口失败
 

@@ -20,7 +20,7 @@
 - 违约惩罚状态由 `violation` 模块公开只读 service 计算，`reservation` 不直接读取 `violation` repository。
 - 指定时段座位占用查询归属 `reservation` 编排，基于状态为 `BOOKED` 或 `CHECKED_IN` 且时间区间重叠的预约记录判断。
 - `resource` 只提供资源基础列表、可见性、开放时间与属性筛选，不负责计算预约占用。
-- 由于当前 `project_blueprint` 尚未允许 `reservation -> violation` 依赖，代码实现前必须先同步顶层依赖规则；未同步前不得直接实现预约惩罚拦截。
+- `project_blueprint` 已允许 `reservation -> violation` 依赖，但仅限公开只读 service；预约惩罚拦截只能消费该 service 的惩罚资格判断结果。
 
 ## 1. 任务定位
 
@@ -135,7 +135,7 @@
 - `reservation` 可以依赖 `identity` 获取当前用户身份、院系和管理端权限信息
 - `reservation` 可以依赖 `resource` 获取自习室、座位、可见性和开放时间信息
 - `reservation` 可以依赖 `system_config` 获取预约时长参数
-- `reservation` 需要依赖 `violation` 的公开只读 service 获取目标用户惩罚状态；该依赖必须先在 `project_blueprint` 中同步允许后才能进入代码实现
+- `reservation` 需要依赖 `violation` 的公开只读 service 获取目标用户惩罚状态；该依赖已在 `project_blueprint` 中允许，且不得直接读取 `violation` repository
 - `reservation` 不依赖 `checkin`
 - `reservation` 不依赖 `notification`
 

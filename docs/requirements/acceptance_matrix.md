@@ -24,7 +24,7 @@
 | Story | Group | Module | 主要接口 | 验收标准 | 最少测试 |
 | --- | --- | --- | --- | --- | --- |
 | US-01 | G2 | `resource` | `GET /student/rooms` | 学生只能看到自己有权限访问的自习室列表 | 可见性查询测试 |
-| US-02 | G2 | `resource` | `GET /student/rooms/{room_id}/seats` | 返回指定自习室座位及状态，支持指定时段查询 | 座位状态查询测试 |
+| US-02 | G2/G4 | `resource` `reservation` | `GET /student/rooms/{room_id}/seats` `GET /student/rooms/{room_id}/seat-availability` | `resource` 返回指定自习室座位及资源侧状态；`reservation` 组合资源基础信息与预约占用，返回指定时段最终可用状态 | 资源侧座位状态查询测试、指定时段可用状态查询测试 |
 | US-03 | G4 | `reservation` | `POST /student/reservations` `POST /admin/reservations` | 学生和管理员可以在规则允许范围内创建预约；预约时间支持 30 分钟粒度；过去或已开始时间段必须被拒绝 | 创建预约测试、30 分钟粒度测试、过去时间拒绝测试、冲突测试 |
 | US-04 | G5 | `checkin` `admin_portal` | `POST /student/checkins/code` `POST /student/checkins/qrcode` `GET /admin/checkins` | 已预约用户可在有效时段内使用当前 5 分钟动态码签到；管理端可查看指定自习室当前动态码状态、有效至时间和签到记录，不提供生成签到码动作 | 动态码窗口稳定/轮换测试、动态码签到测试、二维码签到测试、管理端动态码状态页测试 |
 | US-05 | G6 | `notification` `admin_portal` | 后台调度任务 `GET /admin/notifications` | 预约开始前 15 分钟由后台调度器自动触发提醒；启用 `smtp_email` 通道时可真实发送邮件提醒；管理端只查看通知日志，不提供手动触发任务 | 调度器 tick 测试、提醒任务测试、SMTP 通道测试、邮件内容格式测试、通知日志页面测试 |
