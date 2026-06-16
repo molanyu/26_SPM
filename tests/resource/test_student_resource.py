@@ -1,10 +1,16 @@
 from __future__ import annotations
 
-from datetime import time
+from datetime import date as dt_date
+from datetime import datetime, time, timedelta
 
 from fastapi.testclient import TestClient
 
 from app.core.database import SessionLocal
+from app.modules.reservation.models.reservation import (
+    RESERVATION_SOURCE_STUDENT,
+    RESERVATION_STATUS_BOOKED,
+    Reservation,
+)
 from app.modules.resource.models.seat import Seat
 from app.modules.resource.models.study_room import StudyRoom
 
@@ -97,6 +103,7 @@ def _seed_resource_data(seed_data: dict) -> dict[str, int]:
             "cs_room": cs_room.id,
             "math_room": math_room.id,
             "inactive_room": inactive_room.id,
+            "window_power_seat": seats[0].id,
         }
 
 
@@ -169,6 +176,49 @@ def test_student_can_filter_room_seats_by_track_socket(client: TestClient, seed_
     assert track_disabled_response.status_code == 200
     track_disabled_codes = {item["seat_code"] for item in track_disabled_response.json()["items"]}
     assert track_disabled_codes == {"A-01"}
+
+
+def test_student_room_seats_keep_resource_side_status_when_reservation_exists(
+    client: TestClient,
+    seed_data: dict,
+):
+    room_ids = _seed_resource_data(seed_data)
+    headers = _login_student(
+        client,
+        student_no=seed_data["credentials"]["student_no"],
+        password=seed_data["credentials"]["student_password"],
+    )
+    start_time = datetime.combine(dt_date.today() + timedelta(days=1), time(10, 0))
+    end_time = start_time + timedelta(hours=2)
+    with SessionLocal() as session:
+        session.add(
+            Reservation(
+                user_id=seed_data["users"]["target"],
+                seat_id=room_ids["window_power_seat"],
+                room_id=room_ids["cs_room"],
+                start_time=start_time,
+                end_time=end_time,
+                status=RESERVATION_STATUS_BOOKED,
+                created_by=RESERVATION_SOURCE_STUDENT,
+                cancelled_by=None,
+                cancel_reason=None,
+            ),
+        )
+        session.commit()
+
+    response = client.get(
+        f"/student/rooms/{room_ids['cs_room']}/seats",
+        headers=headers,
+        params={
+            "date": start_time.date().isoformat(),
+            "start_time": start_time.time().isoformat(),
+            "end_time": end_time.time().isoformat(),
+        },
+    )
+
+    assert response.status_code == 200
+    seats_by_id = {item["seat_id"]: item for item in response.json()["items"]}
+    assert seats_by_id[room_ids["window_power_seat"]]["status"] == "AVAILABLE"
 
 
 def test_student_cannot_access_other_department_room_seats(client: TestClient, seed_data: dict):

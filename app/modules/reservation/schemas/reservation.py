@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from datetime import time as dt_time
 from typing import Literal, Self
 
 from pydantic import BaseModel, model_validator
 
 ReservationStatus = Literal["BOOKED", "CHECKED_IN", "CANCELLED", "EXPIRED"]
 ReservationSource = Literal["STUDENT", "ADMIN"]
+SeatAvailabilityStatus = Literal["AVAILABLE", "OCCUPIED"]
 
 
 class StudentReservationCreateRequest(BaseModel):
@@ -86,3 +88,28 @@ class AdminReservationQueryFilters(BaseModel):
         if self.date_from and self.date_to and self.date_from > self.date_to:
             raise ValueError("date_from must be earlier than or equal to date_to.")
         return self
+
+
+class SeatAvailabilityQueryParams(BaseModel):
+    date: date
+    start_time: dt_time
+    end_time: dt_time
+    is_window_side: bool | None = None
+    has_power_socket: bool | None = None
+    has_track_socket: bool | None = None
+
+    @model_validator(mode="after")
+    def validate_time_range(self) -> Self:
+        if self.start_time >= self.end_time:
+            raise ValueError("start_time must be earlier than end_time.")
+        return self
+
+
+class SeatAvailabilityRead(BaseModel):
+    seat_id: int
+    seat_code: str
+    seat_label: str
+    status: SeatAvailabilityStatus
+    is_window_side: bool
+    has_power_socket: bool
+    has_track_socket: bool

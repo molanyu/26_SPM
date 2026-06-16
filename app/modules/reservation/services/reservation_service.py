@@ -26,6 +26,7 @@ from app.modules.reservation.schemas.reservation import (
 from app.modules.reservation.services.conflict_service import ConflictService
 from app.modules.resource.services.reservation_access_service import ReservationAccessService, ReservableSeatSnapshot
 from app.modules.system_config.services.config_reader import ConfigReader
+from app.modules.violation.services.violation_service import ViolationService
 
 
 @dataclass(slots=True)
@@ -56,6 +57,7 @@ class ReservationService:
         self.conflict_service = ConflictService(session)
         self.config_reader = ConfigReader(session)
         self.resource_access_service = ReservationAccessService(session)
+        self.violation_service = ViolationService(session)
 
     def create_student_reservation(
         self,
@@ -128,6 +130,7 @@ class ReservationService:
                     seat_id,
                     user_department_id=target_user.department_id,
                 )
+                self._ensure_user_is_not_penalized(target_user.user_id)
                 self._validate_reservation_window(start_time, end_time, resource)
                 self.conflict_service.ensure_no_conflict(seat_id, start_time, end_time)
                 self.conflict_service.ensure_user_has_no_overlap(target_user.user_id, start_time, end_time)
@@ -176,6 +179,11 @@ class ReservationService:
             raise BadRequestError("Reservation duration exceeds the configured maximum.")
         if start_time.time() < resource.open_time or end_time.time() > resource.close_time:
             raise BadRequestError("Reservation time must be within the study room open hours.")
+
+    def _ensure_user_is_not_penalized(self, user_id: int) -> None:
+        penalty_status = self.violation_service.get_user_penalty_status(user_id)
+        if penalty_status.is_penalized:
+            raise BadRequestError("The target user is currently restricted from creating reservations.")
 
     def _get_reservation_or_raise(self, reservation_id: int) -> Reservation:
         reservation = self.repository.get_by_id(reservation_id)

@@ -10,10 +10,13 @@ from app.modules.identity.models.user import User
 from app.modules.reservation.models.reservation import (
     RESERVATION_SOURCE_STUDENT,
     RESERVATION_STATUS_BOOKED,
+    RESERVATION_STATUS_EXPIRED,
     Reservation,
 )
 from app.modules.resource.models.seat import Seat
 from app.modules.resource.models.study_room import StudyRoom
+from app.modules.system_config.services.config_service import ConfigService
+from app.modules.violation.models.violation_record import VIOLATION_TYPE_NO_SHOW_TIMEOUT, ViolationRecord
 
 
 def _login_admin(client: TestClient, *, email: str, password: str) -> None:
@@ -26,6 +29,7 @@ def _login_admin(client: TestClient, *, email: str, password: str) -> None:
 
 def _seed_admin_reservation_resources(seed_data: dict) -> dict[str, int]:
     with SessionLocal() as session:
+        ConfigService(session).list_configs()
         math_student = User(
             student_no="20240002",
             name="Math Student",
@@ -133,6 +137,40 @@ def _insert_reservation(
         session.add(reservation)
         session.commit()
         return reservation.id
+
+
+def _seed_active_penalty_records(*, user_id: int, room_id: int, seat_id: int) -> None:
+    now = datetime.now().replace(minute=0, second=0, microsecond=0)
+    occurred_times = [
+        now - timedelta(days=3),
+        now - timedelta(days=2),
+        now - timedelta(days=1),
+    ]
+    with SessionLocal() as session:
+        for index, occurred_at in enumerate(occurred_times):
+            reservation = Reservation(
+                user_id=user_id,
+                seat_id=seat_id,
+                room_id=room_id,
+                start_time=occurred_at - timedelta(hours=2),
+                end_time=occurred_at - timedelta(hours=1),
+                status=RESERVATION_STATUS_EXPIRED,
+                created_by=RESERVATION_SOURCE_STUDENT,
+                cancelled_by=None,
+                cancel_reason=None,
+            )
+            session.add(reservation)
+            session.flush()
+            session.add(
+                ViolationRecord(
+                    user_id=user_id,
+                    reservation_id=reservation.id,
+                    violation_type=VIOLATION_TYPE_NO_SHOW_TIMEOUT,
+                    occurred_at=occurred_at,
+                    remark=f"Admin penalty seed {index}",
+                ),
+            )
+        session.commit()
 
 
 def test_admin_can_create_reservation_for_target_student(client: TestClient, seed_data: dict):
@@ -268,6 +306,41 @@ def test_admin_create_reservation_rejects_invalid_request_scenarios(client: Test
     )
     assert conflict_response.status_code == 409
     assert conflict_response.json()["code"] == "conflict"
+
+
+def test_admin_create_reservation_rejects_penalized_target_before_write(
+    client: TestClient,
+    seed_data: dict,
+):
+    resource_ids = _seed_admin_reservation_resources(seed_data)
+    _seed_active_penalty_records(
+        user_id=resource_ids["math_student"],
+        room_id=resource_ids["math_room"],
+        seat_id=resource_ids["math_seat"],
+    )
+    _login_admin(
+        client,
+        email=seed_data["credentials"]["admin_email"],
+        password=seed_data["credentials"]["admin_password"],
+    )
+    start_time, end_time = _future_slot(start_hour=10, duration_hours=2)
+    with SessionLocal() as session:
+        before_count = session.query(Reservation).count()
+
+    response = client.post(
+        "/admin/reservations",
+        json={
+            "user_id": resource_ids["math_student"],
+            "seat_id": resource_ids["math_second_seat"],
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "bad_request"
+    with SessionLocal() as session:
+        assert session.query(Reservation).count() == before_count
 
 
 def test_admin_create_reservation_rejects_same_user_overlap_on_different_seat(

@@ -16,12 +16,15 @@ from app.modules.reservation.models.reservation import (
     RESERVATION_STATUS_BOOKED,
     RESERVATION_STATUS_CANCELLED,
     RESERVATION_STATUS_CHECKED_IN,
+    RESERVATION_STATUS_EXPIRED,
     Reservation,
 )
 from app.modules.reservation.schemas.reservation import StudentReservationCreateRequest
 from app.modules.reservation.services.reservation_service import ReservationService
 from app.modules.resource.models.seat import Seat
 from app.modules.resource.models.study_room import StudyRoom
+from app.modules.system_config.services.config_service import ConfigService
+from app.modules.violation.models.violation_record import VIOLATION_TYPE_NO_SHOW_TIMEOUT, ViolationRecord
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 MINIPROGRAM_RESERVATIONS_JS = WORKSPACE_ROOT / "miniprogram" / "pages" / "reservations" / "reservations.js"
@@ -40,6 +43,7 @@ def _login_student(client: TestClient, *, student_no: str, password: str) -> dic
 
 def _seed_reservation_resources(seed_data: dict) -> dict[str, int]:
     with SessionLocal() as session:
+        ConfigService(session).list_configs()
         cs_room = StudyRoom(
             name="CS Booking Room",
             location="Engineering 201",
@@ -88,6 +92,24 @@ def _seed_reservation_resources(seed_data: dict) -> dict[str, int]:
             has_power_socket=True,
             has_track_socket=False,
         )
+        cs_third_seat = Seat(
+            room_id=cs_room.id,
+            seat_code="A-04",
+            seat_label="CS Third Seat",
+            is_active=True,
+            is_window_side=False,
+            has_power_socket=False,
+            has_track_socket=True,
+        )
+        cs_fourth_seat = Seat(
+            room_id=cs_room.id,
+            seat_code="A-05",
+            seat_label="CS Fourth Seat",
+            is_active=True,
+            is_window_side=True,
+            has_power_socket=False,
+            has_track_socket=False,
+        )
         math_seat = Seat(
             room_id=math_room.id,
             seat_code="B-01",
@@ -115,7 +137,17 @@ def _seed_reservation_resources(seed_data: dict) -> dict[str, int]:
             has_power_socket=False,
             has_track_socket=False,
         )
-        session.add_all([cs_seat, cs_second_seat, math_seat, inactive_seat, inactive_room_seat])
+        session.add_all(
+            [
+                cs_seat,
+                cs_second_seat,
+                cs_third_seat,
+                cs_fourth_seat,
+                math_seat,
+                inactive_seat,
+                inactive_room_seat,
+            ],
+        )
         session.commit()
 
         return {
@@ -124,6 +156,8 @@ def _seed_reservation_resources(seed_data: dict) -> dict[str, int]:
             "inactive_room": inactive_room.id,
             "cs_seat": cs_seat.id,
             "cs_second_seat": cs_second_seat.id,
+            "cs_third_seat": cs_third_seat.id,
+            "cs_fourth_seat": cs_fourth_seat.id,
             "math_seat": math_seat.id,
             "inactive_seat": inactive_seat.id,
             "inactive_room_seat": inactive_room_seat.id,
@@ -167,6 +201,40 @@ def _insert_reservation(
         session.add(reservation)
         session.commit()
         return reservation.id
+
+
+def _seed_active_penalty_records(seed_data: dict, resource_ids: dict[str, int]) -> None:
+    now = datetime.now().replace(minute=0, second=0, microsecond=0)
+    occurred_times = [
+        now - timedelta(days=3),
+        now - timedelta(days=2),
+        now - timedelta(days=1),
+    ]
+    with SessionLocal() as session:
+        for index, occurred_at in enumerate(occurred_times):
+            reservation = Reservation(
+                user_id=seed_data["users"]["student"],
+                seat_id=resource_ids["cs_seat"],
+                room_id=resource_ids["cs_room"],
+                start_time=occurred_at - timedelta(hours=2),
+                end_time=occurred_at - timedelta(hours=1),
+                status=RESERVATION_STATUS_EXPIRED,
+                created_by=RESERVATION_SOURCE_STUDENT,
+                cancelled_by=None,
+                cancel_reason=None,
+            )
+            session.add(reservation)
+            session.flush()
+            session.add(
+                ViolationRecord(
+                    user_id=seed_data["users"]["student"],
+                    reservation_id=reservation.id,
+                    violation_type=VIOLATION_TYPE_NO_SHOW_TIMEOUT,
+                    occurred_at=occurred_at,
+                    remark=f"Penalty seed {index}",
+                ),
+            )
+        session.commit()
 
 
 def test_student_can_create_reservation(client: TestClient, seed_data: dict):
@@ -360,6 +428,35 @@ def test_invisible_or_inactive_resources_are_rejected(client: TestClient, seed_d
     assert inactive_room_response.json()["code"] == "bad_request"
 
 
+def test_penalized_student_cannot_create_reservation_before_write(client: TestClient, seed_data: dict):
+    resource_ids = _seed_reservation_resources(seed_data)
+    _seed_active_penalty_records(seed_data, resource_ids)
+    headers = _login_student(
+        client,
+        student_no=seed_data["credentials"]["student_no"],
+        password=seed_data["credentials"]["student_password"],
+    )
+    start_time, end_time = _future_slot(start_hour=10, duration_hours=2)
+
+    with SessionLocal() as session:
+        before_count = session.query(Reservation).count()
+
+    response = client.post(
+        "/student/reservations",
+        headers=headers,
+        json={
+            "seat_id": resource_ids["cs_second_seat"],
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "bad_request"
+    with SessionLocal() as session:
+        assert session.query(Reservation).count() == before_count
+
+
 def test_conflicting_reservation_is_rejected(client: TestClient, seed_data: dict):
     resource_ids = _seed_reservation_resources(seed_data)
     headers = _login_student(
@@ -392,6 +489,134 @@ def test_conflicting_reservation_is_rejected(client: TestClient, seed_data: dict
 
     assert second_response.status_code == 409
     assert second_response.json()["code"] == "conflict"
+
+
+def test_student_room_seat_availability_marks_only_booked_and_checked_in_overlaps_as_occupied(
+    client: TestClient,
+    seed_data: dict,
+):
+    resource_ids = _seed_reservation_resources(seed_data)
+    headers = _login_student(
+        client,
+        student_no=seed_data["credentials"]["student_no"],
+        password=seed_data["credentials"]["student_password"],
+    )
+    start_time, end_time = _future_slot(start_hour=12, duration_hours=2)
+    _insert_reservation(
+        user_id=seed_data["users"]["target"],
+        seat_id=resource_ids["cs_seat"],
+        room_id=resource_ids["cs_room"],
+        start_time=start_time + timedelta(minutes=30),
+        end_time=end_time + timedelta(minutes=30),
+        status=RESERVATION_STATUS_BOOKED,
+    )
+    _insert_reservation(
+        user_id=seed_data["users"]["target"],
+        seat_id=resource_ids["cs_second_seat"],
+        room_id=resource_ids["cs_room"],
+        start_time=start_time,
+        end_time=end_time,
+        status=RESERVATION_STATUS_CHECKED_IN,
+    )
+    _insert_reservation(
+        user_id=seed_data["users"]["target"],
+        seat_id=resource_ids["cs_third_seat"],
+        room_id=resource_ids["cs_room"],
+        start_time=start_time,
+        end_time=end_time,
+        status=RESERVATION_STATUS_CANCELLED,
+    )
+    _insert_reservation(
+        user_id=seed_data["users"]["target"],
+        seat_id=resource_ids["cs_fourth_seat"],
+        room_id=resource_ids["cs_room"],
+        start_time=start_time,
+        end_time=end_time,
+        status=RESERVATION_STATUS_EXPIRED,
+    )
+
+    response = client.get(
+        f"/student/rooms/{resource_ids['cs_room']}/seat-availability",
+        headers=headers,
+        params={
+            "date": start_time.date().isoformat(),
+            "start_time": start_time.time().isoformat(),
+            "end_time": end_time.time().isoformat(),
+        },
+    )
+
+    assert response.status_code == 200
+    statuses = {item["seat_id"]: item["status"] for item in response.json()["items"]}
+    assert statuses[resource_ids["cs_seat"]] == "OCCUPIED"
+    assert statuses[resource_ids["cs_second_seat"]] == "OCCUPIED"
+    assert statuses[resource_ids["cs_third_seat"]] == "AVAILABLE"
+    assert statuses[resource_ids["cs_fourth_seat"]] == "AVAILABLE"
+
+
+def test_student_room_seat_availability_respects_resource_visibility_and_attribute_filters(
+    client: TestClient,
+    seed_data: dict,
+):
+    resource_ids = _seed_reservation_resources(seed_data)
+    headers = _login_student(
+        client,
+        student_no=seed_data["credentials"]["student_no"],
+        password=seed_data["credentials"]["student_password"],
+    )
+    start_time, end_time = _future_slot(start_hour=12, duration_hours=2)
+
+    filtered_response = client.get(
+        f"/student/rooms/{resource_ids['cs_room']}/seat-availability",
+        headers=headers,
+        params={
+            "date": start_time.date().isoformat(),
+            "start_time": start_time.time().isoformat(),
+            "end_time": end_time.time().isoformat(),
+            "has_track_socket": "true",
+        },
+    )
+
+    assert filtered_response.status_code == 200
+    assert {item["seat_id"] for item in filtered_response.json()["items"]} == {resource_ids["cs_third_seat"]}
+
+    invisible_response = client.get(
+        f"/student/rooms/{resource_ids['math_room']}/seat-availability",
+        headers=headers,
+        params={
+            "date": start_time.date().isoformat(),
+            "start_time": start_time.time().isoformat(),
+            "end_time": end_time.time().isoformat(),
+        },
+    )
+
+    assert invisible_response.status_code == 404
+    assert invisible_response.json()["code"] == "not_found"
+
+
+def test_student_room_seat_availability_rejects_time_outside_open_hours(
+    client: TestClient,
+    seed_data: dict,
+):
+    resource_ids = _seed_reservation_resources(seed_data)
+    headers = _login_student(
+        client,
+        student_no=seed_data["credentials"]["student_no"],
+        password=seed_data["credentials"]["student_password"],
+    )
+    start_time, end_time = _future_slot(start_hour=7, duration_hours=1)
+
+    response = client.get(
+        f"/student/rooms/{resource_ids['cs_room']}/seat-availability",
+        headers=headers,
+        params={
+            "date": start_time.date().isoformat(),
+            "start_time": start_time.time().isoformat(),
+            "end_time": end_time.time().isoformat(),
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "bad_request"
 
 
 def test_same_student_overlapping_reservation_on_different_seat_is_rejected(client: TestClient, seed_data: dict):
