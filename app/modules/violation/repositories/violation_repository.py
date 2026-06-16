@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.identity.models.user import User
 from app.modules.reservation.models.reservation import Reservation
-from app.modules.violation.models.violation_record import ViolationRecord
+from app.modules.violation.models.violation_record import VIOLATION_TYPE_NO_SHOW_TIMEOUT, ViolationRecord
 from app.modules.violation.schemas.violation import ViolationQueryFilters
 
 
@@ -40,6 +40,41 @@ class ViolationRepository:
         statement = self._build_query(filters).with_only_columns(func.count(ViolationRecord.id)).order_by(None)
         return int(self.session.scalar(statement) or 0)
 
+    def count_unique_no_show_violations(
+        self,
+        *,
+        user_id: int,
+        window_start: datetime,
+        window_end: datetime,
+    ) -> int:
+        unique_records = self._build_unique_no_show_window_query(
+            user_id=user_id,
+            window_start=window_start,
+            window_end=window_end,
+        ).subquery()
+        statement = select(func.count()).select_from(unique_records)
+        return int(self.session.scalar(statement) or 0)
+
+    def list_unique_no_show_occurred_at_for_penalty(
+        self,
+        *,
+        user_id: int,
+        window_start: datetime,
+        window_end: datetime,
+        limit: int,
+    ) -> list[datetime]:
+        unique_records = self._build_unique_no_show_window_query(
+            user_id=user_id,
+            window_start=window_start,
+            window_end=window_end,
+        ).subquery()
+        statement = (
+            select(unique_records.c.occurred_at)
+            .order_by(unique_records.c.occurred_at.asc(), unique_records.c.reservation_id.asc())
+            .limit(limit)
+        )
+        return list(self.session.scalars(statement))
+
     def _build_query(self, filters: ViolationQueryFilters):
         statement = (
             select(ViolationRecord, Reservation.room_id, User.student_no)
@@ -64,3 +99,24 @@ class ViolationRepository:
                 ViolationRecord.occurred_at < datetime.combine(filters.date_to + timedelta(days=1), time.min),
             )
         return statement
+
+    def _build_unique_no_show_window_query(
+        self,
+        *,
+        user_id: int,
+        window_start: datetime,
+        window_end: datetime,
+    ):
+        return (
+            select(
+                ViolationRecord.reservation_id.label("reservation_id"),
+                func.min(ViolationRecord.occurred_at).label("occurred_at"),
+            )
+            .where(
+                ViolationRecord.user_id == user_id,
+                ViolationRecord.violation_type == VIOLATION_TYPE_NO_SHOW_TIMEOUT,
+                ViolationRecord.occurred_at >= window_start,
+                ViolationRecord.occurred_at <= window_end,
+            )
+            .group_by(ViolationRecord.reservation_id)
+        )

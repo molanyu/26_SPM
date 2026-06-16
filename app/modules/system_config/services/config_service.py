@@ -10,6 +10,9 @@ from app.modules.system_config.constants import (
     SYSTEM_CONFIG_DEFINITION_MAP,
     SYSTEM_CONFIG_DEFINITIONS,
     VALUE_TYPE_INT,
+    VIOLATION_PENALTY_DURATION_DAYS,
+    VIOLATION_PENALTY_THRESHOLD_COUNT,
+    VIOLATION_PENALTY_WINDOW_DAYS,
     VIOLATION_THRESHOLD_MINUTES,
 )
 from app.modules.system_config.models.system_config import SystemConfig
@@ -47,16 +50,20 @@ class ConfigService:
         definition = SYSTEM_CONFIG_DEFINITION_MAP.get(config_key)
         if definition is None:
             raise NotFoundError("System config does not exist.")
-        configs = self._ensure_required_configs()
-        return configs[definition.config_key]
+        config = self.repository.get_by_key(definition.config_key)
+        if config is None:
+            raise BadRequestError("Required system config is missing.")
+        return config
 
     def parse_config_value(self, config: SystemConfig) -> int:
         if config.value_type != VALUE_TYPE_INT:
             raise BadRequestError("Unsupported system config value_type.")
         try:
-            return int(config.config_value)
-        except ValueError as exc:
+            value = int(config.config_value)
+        except (TypeError, ValueError) as exc:
             raise BadRequestError("Stored system config value is invalid.") from exc
+        self._validate_int_range(config.config_key, value)
+        return value
 
     def _ensure_required_configs(self) -> dict[str, SystemConfig]:
         existing = {
@@ -101,11 +108,20 @@ class ConfigService:
         else:
             raise BadRequestError("config_value must match the declared value_type.")
 
+        self._validate_int_range(config_key, value)
+        return value
+
+    def _validate_int_range(self, config_key: str, value: int) -> None:
         if config_key == MAX_RESERVATION_HOURS and value <= 0:
             raise BadRequestError("max_reservation_hours must be a positive integer.")
         if config_key in {CHECKIN_GRACE_MINUTES, VIOLATION_THRESHOLD_MINUTES} and value < 0:
             raise BadRequestError(f"{config_key} must be a non-negative integer.")
-        return value
+        if config_key in {
+            VIOLATION_PENALTY_THRESHOLD_COUNT,
+            VIOLATION_PENALTY_WINDOW_DAYS,
+            VIOLATION_PENALTY_DURATION_DAYS,
+        } and value <= 0:
+            raise BadRequestError(f"{config_key} must be a positive integer.")
 
     def _validate_cross_config_rules(self, values: dict[str, int]) -> None:
         if values[VIOLATION_THRESHOLD_MINUTES] < values[CHECKIN_GRACE_MINUTES]:

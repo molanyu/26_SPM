@@ -40,3 +40,12 @@ class ViolationRecordRead(BaseModel):
     occurred_at: datetime
     remark: str | None = None
     created_at: datetime
+
+
+class UserPenaltyStatusRead(BaseModel):
+    is_penalized: bool
+    violation_count: int
+    window_start: datetime
+    window_end: datetime
+    penalty_start: datetime | None = None
+    penalty_end: datetime | None = None
