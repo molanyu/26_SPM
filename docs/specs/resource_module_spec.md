@@ -60,6 +60,8 @@
   - 查询参数是否合法
 - 预约冲突、已预约、已占用等预约链路状态不属于 `resource` 的决策范围
 - `resource` 不得依赖 `reservation` 模块去计算座位占用状态
+- 即使 `GET /student/rooms/{room_id}/seats` 接收 `date`、`start_time`、`end_time` 查询参数，`resource` 也只校验参数形态并返回资源侧状态；指定时段内是否被预约占用，必须由 `reservation` 的公开查询能力计算
+- 如学生端或助手需要展示指定时段最终可用状态，应由上层编排组合 `resource` 的座位基础信息与 `reservation` 的占用查询结果，不得在 `resource` 内部反向依赖 `reservation`
 
 ## 3. 资源规则
 
@@ -199,6 +201,7 @@ app/modules/resource/api/admin_resource.py
 - 公共自习室对所有学生可见
 - 院系专属自习室对非本院系学生不可见
 - 学生可查询指定自习室座位列表
+- 学生指定 `date/start_time/end_time` 查询座位列表时，`resource` 不计算预约占用，仍只返回资源侧状态
 - 学生可按靠窗筛选座位
 - 学生可按固定插座筛选座位
 - 学生可按移动导轨插座筛选座位

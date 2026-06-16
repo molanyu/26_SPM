@@ -36,12 +36,18 @@
 - `max_reservation_hours`
 - `checkin_grace_minutes`
 - `violation_threshold_minutes`
+- `violation_penalty_threshold_count`
+- `violation_penalty_window_days`
+- `violation_penalty_duration_days`
 
 说明：
 
 - `max_reservation_hours` 用于限制单次预约最大小时数
 - `checkin_grace_minutes` 用于签到宽限时间
 - `violation_threshold_minutes` 用于超时未签到后的违约判定阈值
+- `violation_penalty_threshold_count` 用于判定触发预约惩罚所需的累计违约次数
+- `violation_penalty_window_days` 用于判定累计违约的滚动统计窗口
+- `violation_penalty_duration_days` 用于判定触发惩罚后的预约拦截期限
 
 如果后续模块需要新增配置项，必须先更新相关 spec，再修改代码。
 
@@ -82,6 +88,9 @@
 - `checkin_grace_minutes` 必须是非负整数
 - `violation_threshold_minutes` 必须是非负整数
 - `violation_threshold_minutes` 不得小于 `checkin_grace_minutes`
+- `violation_penalty_threshold_count` 必须是正整数
+- `violation_penalty_window_days` 必须是正整数
+- `violation_penalty_duration_days` 必须是正整数
 
 ## 4. 模块边界
 
@@ -97,6 +106,7 @@
 - `reservation` 通过 `system_config` 公开 service 读取 `max_reservation_hours`
 - `checkin` 通过 `system_config` 公开 service 读取 `checkin_grace_minutes`
 - `violation` 通过 `system_config` 公开 service 读取 `violation_threshold_minutes`
+- `violation` 通过 `system_config` 公开 service 读取 `violation_penalty_threshold_count`、`violation_penalty_window_days` 和 `violation_penalty_duration_days`
 - `system_config` 不调用其他业务模块做反向校验
 
 ## 5. 数据模型范围
@@ -186,12 +196,16 @@ app/modules/system_config/api/admin_system_config.py
 - 管理员可更新 `max_reservation_hours`
 - 管理员可更新 `checkin_grace_minutes`
 - 管理员可更新 `violation_threshold_minutes`
+- 管理员可更新 `violation_penalty_threshold_count`
+- 管理员可更新 `violation_penalty_window_days`
+- 管理员可更新 `violation_penalty_duration_days`
 - 未认证访问系统参数接口失败
 - 无权限访问系统参数接口失败
 - 非法 `config_key` 更新失败
 - 非法类型更新失败
 - 非法范围更新失败
 - `violation_threshold_minutes < checkin_grace_minutes` 更新失败
+- 惩罚相关配置项为 0 或负数时更新失败
 - 其他模块可通过公开 service 读取配置值
 
 ## 11. 完成标准

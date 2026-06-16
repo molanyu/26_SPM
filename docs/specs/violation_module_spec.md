@@ -18,6 +18,7 @@
 - 超时未签到违约记录生成
 - 管理端违约记录查询接口
 - 对 `checkin` 暴露的违约落账 service
+- 违约累计与惩罚资格查询规则
 
 本次实现不包含以下内容：
 
@@ -26,6 +27,7 @@
 - 提醒通知
 - 管理端统计大盘
 - 复杂违约类型体系
+- 多级惩罚、人工申诉、惩罚豁免和信用分体系
 
 ### 2.1 当前支持的违约类型
 
@@ -57,17 +59,31 @@
 - `user_id`、`student_no`、`room_id`、`date_from`、`date_to` 必须支持任意单独使用或任意组合使用
 - 违约查询只返回已经落账的违约记录
 
+### 2.4 违约累计与惩罚资格规则
+
+- 违约累计只统计已经落账的 `NO_SHOW_TIMEOUT` 记录
+- 同一 `reservation_id` 的重复落账不得重复计入累计次数
+- 累计窗口由 `system_config.violation_penalty_window_days` 提供
+- 惩罚触发阈值由 `system_config.violation_penalty_threshold_count` 提供
+- 惩罚期限由 `system_config.violation_penalty_duration_days` 提供
+- 当用户在累计窗口内的违约次数达到阈值时，视为处于惩罚状态
+- 惩罚状态的开始时间以触发阈值的最近一条违约 `occurred_at` 为准
+- 惩罚状态的结束时间为开始时间加惩罚期限
+- 惩罚期结束后，用户恢复预约资格；历史违约记录仍保留，不得物理删除
+- 惩罚资格查询必须基于数据库层聚合或筛选完成，不允许先拉取用户全量违约记录后在内存中复杂计算
+
 ## 3. 模块边界
 
 - `violation` 可以依赖 `reservation`
 - `violation` 不依赖 `resource`
 - `violation` 不依赖 `checkin`
 - `violation` 不依赖 `notification`
-- `violation` 不依赖 `system_config`
+- `violation` 可以依赖 `system_config` 的公开配置读取 service 获取违约累计与惩罚参数
 
 跨模块协作规则固定如下：
 
 - `checkin` 只能通过 `violation` 的公开 service 触发违约落账
+- 其他模块如需判断用户是否处于惩罚状态，只能调用 `violation` 的公开只读 service，不得直接读取 `violation` repository
 - `violation` 不直接调用 `checkin` 的 repository 或 service
 - `violation` 不直接写 `reservation` 的数据状态
 - 若违约查询需要按 `room_id` 过滤，过滤条件必须通过 `reservation` 关联关系获得，不允许越过模块边界做跨模块写入
@@ -96,6 +112,21 @@
 - 写接口不对外暴露 HTTP 入口
 - 违约落账只能由内部 service 触发
 
+### 4.4 惩罚资格查询
+
+- 惩罚资格查询 service 必须接收 `user_id` 和可选 `as_of`
+- 查询结果至少包含：
+  - `is_penalized`
+  - `violation_count`
+  - `window_start`
+  - `window_end`
+  - `penalty_start`
+  - `penalty_end`
+- 未达到惩罚阈值时，`is_penalized=false`
+- 达到惩罚阈值但惩罚期限已过时，`is_penalized=false`
+- 惩罚资格查询只读，不得修改 `Reservation`、`ViolationRecord` 或用户数据
+- 预约拦截由 `reservation` 模块在创建预约前执行，`violation` 只提供只读判断结果
+
 ## 5. 数据模型范围
 
 本模块使用以下实体：
@@ -121,11 +152,13 @@
 ### 公开 service
 
 - `record_timeout_violation(reservation_id)`
+- `get_user_penalty_status(user_id, as_of=None)`
 
 说明：
 
 - 第一版不实现统计接口
 - 第一版不实现对外 HTTP 写接口
+- 惩罚资格查询不新增学生端 HTTP 入口，只作为跨模块只读 service 使用
 
 ## 7. 代码边界
 
@@ -202,4 +235,5 @@ app/modules/violation/api/admin_violation.py
 - `checkin` 可通过公开 service 触发超时未签到违约落账
 - 同一预约不会生成重复违约记录
 - 管理员可以查询违约记录
+- 可基于已落账违约记录计算用户惩罚状态
 - 关键违约测试通过

@@ -1,0 +1,52 @@
+version: 2.0
+
+params:
+  - name: CODEARTS_REPO_SSH_URL
+    value: REPLACE_WITH_CODEARTS_REPO_SSH_URL
+  - name: DATABASE_URL
+    value: REPLACE_WITH_TEST_POSTGRES_URL
+  - name: POSTGRES_REGRESSION_URL
+    value: REPLACE_WITH_TEST_POSTGRES_URL
+
+env:
+  resource:
+    type: docker
+    arch: X86
+    class: 8U16G
+
+steps:
+  PRE_BUILD:
+    - checkout:
+        name: checkout
+        inputs:
+          scm: codehub
+          url: ${CODEARTS_REPO_SSH_URL}
+          branch: ${codeBranch}
+
+  BUILD:
+    - sh:
+        name: python test suite
+        inputs:
+          command: |
+            set -e
+            python3 -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 13) else 'Python 3.13+ required, current: ' + sys.version)"
+            python3 -m pip install --upgrade pip
+            python3 -m pip install -e ".[test]"
+            python3 run_tests.py
+
+    - sh:
+        name: postgres smoke suite
+        inputs:
+          command: |
+            set -e
+            export DATABASE_URL='${DATABASE_URL}'
+            export POSTGRES_REGRESSION_URL='${POSTGRES_REGRESSION_URL}'
+            if [ "$DATABASE_URL" = "REPLACE_WITH_TEST_POSTGRES_URL" ] || [ -z "$DATABASE_URL" ]; then
+              echo "DATABASE_URL must be set to a disposable PostgreSQL test database."
+              exit 1
+            fi
+            if [ "$POSTGRES_REGRESSION_URL" = "REPLACE_WITH_TEST_POSTGRES_URL" ] || [ -z "$POSTGRES_REGRESSION_URL" ]; then
+              export POSTGRES_REGRESSION_URL="$DATABASE_URL"
+            fi
+            alembic upgrade head
+            python3 run_tests.py --suite postgres
