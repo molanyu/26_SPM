@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.database import SessionLocal
 from app.core.errors import BadRequestError, NotFoundError
 from app.modules.system_config.constants import (
     CHECKIN_GRACE_MINUTES,
@@ -50,10 +52,8 @@ class ConfigService:
         definition = SYSTEM_CONFIG_DEFINITION_MAP.get(config_key)
         if definition is None:
             raise NotFoundError("System config does not exist.")
-        config = self.repository.get_by_key(definition.config_key)
-        if config is None:
-            raise BadRequestError("Required system config is missing.")
-        return config
+        configs = self._ensure_required_configs()
+        return configs[definition.config_key]
 
     def parse_config_value(self, config: SystemConfig) -> int:
         if config.value_type != VALUE_TYPE_INT:
@@ -66,9 +66,49 @@ class ConfigService:
         return value
 
     def _ensure_required_configs(self) -> dict[str, SystemConfig]:
+        self._seed_missing_required_configs()
         existing = {
             config.config_key: config
             for config in self.repository.list_by_keys(FIRST_BATCH_CONFIG_KEYS)
+        }
+        if set(existing) != set(FIRST_BATCH_CONFIG_KEYS):
+            raise BadRequestError("Required system config is missing.")
+        return existing
+
+    def _seed_missing_required_configs(self) -> None:
+        try:
+            self._create_missing_defaults_in_new_session()
+        except IntegrityError:
+            self._create_missing_defaults_after_race()
+
+    def _create_missing_defaults_in_new_session(self) -> None:
+        with SessionLocal() as session:
+            repository = ConfigRepository(session)
+            missing = self._build_missing_default_configs(repository)
+            if missing:
+                repository.create_many(missing)
+
+    def _create_missing_defaults_after_race(self) -> None:
+        with SessionLocal() as session:
+            session.rollback()
+            repository = ConfigRepository(session)
+            missing = self._build_missing_default_configs(repository)
+            if not missing:
+                return
+            try:
+                repository.create_many(missing)
+            except IntegrityError as exc:
+                session.rollback()
+                if self._has_all_required_configs():
+                    return
+                raise exc
+        if not self._has_all_required_configs():
+            raise BadRequestError("Required system config is missing.")
+
+    def _build_missing_default_configs(self, repository: ConfigRepository) -> list[SystemConfig]:
+        existing = {
+            config.config_key: config
+            for config in repository.list_by_keys(FIRST_BATCH_CONFIG_KEYS)
         }
         missing = []
         for definition in SYSTEM_CONFIG_DEFINITIONS:
@@ -80,11 +120,17 @@ class ConfigService:
                 value_type=definition.value_type,
                 description=definition.description,
             )
-            existing[definition.config_key] = config
             missing.append(config)
-        if missing:
-            self.repository.create_many(missing)
-        return existing
+        return missing
+
+    def _has_all_required_configs(self) -> bool:
+        with SessionLocal() as session:
+            repository = ConfigRepository(session)
+            existing_keys = {
+                config.config_key
+                for config in repository.list_by_keys(FIRST_BATCH_CONFIG_KEYS)
+            }
+        return existing_keys == set(FIRST_BATCH_CONFIG_KEYS)
 
     def _validate_and_normalize_value(self, config_key: str, raw_value: object) -> str:
         definition = SYSTEM_CONFIG_DEFINITION_MAP[config_key]
