@@ -293,6 +293,7 @@
 - `models` 不跨模块直接引用业务逻辑
 - `repositories` 不跨模块直接写入数据
 - `admin_portal` 不直接操作 `repositories`
+- `admin_portal` 执行角色停用或删除时，只能调用 `identity` 公开 service，不得直接操作 `identity` repository 或 model
 - `api` 不直接操作其他模块的 `models`
 
 跨模块协作规则：

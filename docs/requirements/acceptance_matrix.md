@@ -39,7 +39,7 @@
 | US-14 | G6 | `violation` `reservation` `admin_portal` | `GET /admin/reservations` `GET /admin/reservations/records` `GET /admin/violations` | 管理员可按条件查询预约记录和违约记录；违约记录无筛选时显示全部且 HTML 错误不返回裸 JSON | 预约记录筛选测试、违约记录筛选测试、违约页 HTML 错误测试 |
 | US-15 | G4 | `reservation` | `POST /admin/reservations` `POST /admin/reservations/{reservation_id}/cancel` | 管理员可代预约和代取消 | 代理操作测试 |
 | US-16 | G7 | `violation` `resource` `admin_portal` | `GET /admin/statistics/usage` `GET /admin/statistics` | 管理员可查看使用率和违约率统计 | 统计查询测试、管理端统计页测试 |
-| US-17 | G1 | `identity` | `GET /admin/roles` `POST /admin/roles` `PUT /admin/roles/{role_id}` `POST /admin/roles/{role_id}/deactivate` | 系统管理员可创建、修改并停用角色 | 角色管理测试 |
+| US-17 | G1 | `identity` | `GET /admin/roles` `POST /admin/roles` `PUT /admin/roles/{role_id}` `POST /admin/roles/{role_id}/deactivate` `DELETE /admin/roles/{role_id}` | 系统管理员可创建、修改、停用并删除符合条件的角色；已分配给用户或系统保留角色不得删除；第一版系统保留角色为 `Role.code == "system_admin"` | 角色管理测试、角色删除约束测试、系统保留角色删除失败测试 |
 | US-18 | G1 | `identity` | `POST /admin/users/{user_id}/roles` | 系统管理员可给用户分配角色 | 用户角色分配测试 |
 | US-19 | G1 | `identity` `admin_portal` | `GET /admin/me` `GET /admin/departments` | 管理员仅看到被授权菜单且写操作受服务端权限保护；院系管理入口由 `identity.departments.write` 控制 | 菜单权限测试、接口权限测试、院系菜单权限测试 |
 | US-25 | G1 | `identity` `admin_portal` | `GET /admin/users/new` `POST /admin/users` | 系统管理员可通过管理端创建单个学生或管理员账号；学生账号可选填写通知邮箱但仍使用学号登录；重复登录标识、重复通知邮箱、无效院系和非法输入需受控失败，且响应不返回原始密码；用户创建页只展示启用院系 | 用户创建接口测试、管理端用户创建页面测试、通知邮箱字段测试、启用院系选项测试 |

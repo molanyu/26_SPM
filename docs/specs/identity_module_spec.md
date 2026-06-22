@@ -24,7 +24,7 @@
 - 管理员退出接口
 - 当前用户信息接口
 - 单个用户创建接口
-- 角色管理接口（创建、修改、停用）
+- 角色管理接口（创建、修改、停用、删除）
 - 用户角色分配接口
 - 基础权限校验能力
 
@@ -111,7 +111,11 @@
 - 任何读取接口和用户创建成功响应都不得返回原始密码或 `password_hash`
 - 用户可分配多个角色
 - 角色可分配多个权限点
-- 第一版“删除角色”通过受控停用实现，不做物理删除
+- 停用角色用于禁用或下线角色，不等同于删除角色
+- 删除角色必须通过受控物理删除实现，只允许删除未分配给任何用户、非系统保留角色的角色
+- 第一版系统保留角色固定按 `Role.code == "system_admin"` 判定，不新增数据字段；`system_admin` 即使未分配用户也不得删除
+- 删除角色时必须清理该角色的 `role_permissions` 绑定，不得删除 `users`，不得删除 `permissions`
+- 如果角色仍存在 `user_roles` 分配，必须返回受控错误，并提示先解除分配或停用角色
 
 ## 6. 对外接口
 
@@ -135,6 +139,7 @@
 - `POST /admin/roles`
 - `PUT /admin/roles/{role_id}`
 - `POST /admin/roles/{role_id}/deactivate`
+- `DELETE /admin/roles/{role_id}`
 - `GET /admin/permissions`
 - `POST /admin/users/{user_id}/roles`
 
@@ -154,7 +159,7 @@ app/modules/identity/
 边界规则如下：
 
 - `api` 只接收请求并调用 `services`
-- `services` 负责登录、鉴权、单个用户创建、角色分配、院系只读查询和菜单权限判断
+- `services` 负责登录、鉴权、单个用户创建、角色创建、角色修改、角色停用、角色删除、角色分配、院系只读查询和菜单权限判断
 - `repositories` 负责用户、角色、权限、院系的查询和写入
 - `models` 只定义表结构
 - 不允许其他模块直接操作 `identity` 的 repository
@@ -230,6 +235,9 @@ app/modules/identity/api/admin_rbac.py
 - 用户创建成功响应不返回原始密码或 `password_hash`
 - 角色创建成功
 - 角色停用成功
+- 未分配且非系统保留角色删除成功，并清理对应 `role_permissions`
+- 已分配给用户的角色删除失败，并保留 `user_roles`、`users` 和 `permissions`
+- `Role.code == "system_admin"` 的系统保留角色删除失败，即使该角色未分配给任何用户
 - 用户角色分配成功
 - 院系访问限制生效
 - 菜单权限过滤生效
@@ -250,6 +258,7 @@ app/modules/identity/api/admin_rbac.py
 - 单个用户创建接口可用
 - 角色管理接口可用
 - 角色停用接口可用
+- 角色删除接口可用，且仅允许删除未分配给任何用户、非系统保留角色的角色；`Role.code == "system_admin"` 的系统保留角色即使未分配用户也不得删除
 - 用户角色分配接口可用
 - 菜单权限可按权限点过滤
 - 关键权限测试通过
@@ -307,3 +316,26 @@ app/modules/identity/api/admin_rbac.py
 - 院系列表之外的复杂组织架构。
 - 院系树、批量导入、物理删除。
 - 放宽 bootstrap 对已有角色和管理员账号的 create-only 边界。
+
+## 15. Spec 增补（2026-06-22）
+
+本轮补入 RBAC 角色管理的“删除角色”文档契约，目标是让 US-17 覆盖角色维护的增删改查能力，并保留既有停用语义。
+
+范围固定如下：
+
+- 保留 `POST /admin/roles/{role_id}/deactivate` 作为角色禁用或下线动作。
+- 新增 `DELETE /admin/roles/{role_id}` 作为真正删除角色动作。
+- 删除角色只允许作用于未分配给任何用户、非系统保留角色的角色。
+- 第一版系统保留角色固定按 `Role.code == "system_admin"` 判定，不新增数据字段；`system_admin` 即使未分配用户也不得删除。
+- 删除角色时必须清理该角色的 `role_permissions` 绑定。
+- 删除角色不得删除 `users`，不得删除 `permissions`。
+- 如果角色存在 `user_roles` 分配，必须返回受控错误，并提示先解除分配或停用角色。
+- 管理端 `admin_portal` 后续如提供删除入口，只能通过 `identity` 公开 service 调用，不得直接操作 `identity` repository 或 model。
+
+不包含以下内容：
+
+- 批量删除角色。
+- 删除权限点。
+- 删除用户。
+- 强制删除已分配角色。
+- 为角色删除新增审计日志或回收站机制。

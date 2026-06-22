@@ -540,7 +540,29 @@
 
 用途：
 
-- 停用角色（第一版删除语义）
+- 停用角色
+
+说明：
+
+- 停用角色用于禁用或下线角色，不做物理删除
+
+#### `DELETE /admin/roles/{role_id}`
+
+用途：
+
+- 删除角色
+
+权限：
+
+- `identity.roles.write`
+
+说明：
+
+- 只允许删除未分配给任何用户、非系统保留角色的角色
+- 第一版系统保留角色固定按 `Role.code == "system_admin"` 判定，不新增数据字段；`system_admin` 即使未分配用户也不得删除
+- 删除时清理该角色的 `role_permissions`
+- 不删除 `users`，不删除 `permissions`
+- 如果角色存在 `user_roles` 分配，必须返回受控状态错误，并提示先解除分配或停用角色
 
 #### `GET /admin/permissions`
 
