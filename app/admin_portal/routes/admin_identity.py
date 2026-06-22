@@ -127,6 +127,27 @@ async def submit_roles_page(
             )
             return render_page("roles", context, status_code=page_service.html_error_status(exc))
 
+    if action == "delete":
+        try:
+            page_service.permission_service.ensure_permission(current_admin.id, IDENTITY_ROLES_WRITE)
+            role_id = _parse_optional_int(form.get("role_id"))
+            if role_id is None:
+                raise ValueError("请选择要删除的角色。")
+            page_service.permission_service.delete_role(role_id)
+            context = page_service.get_roles_context(
+                request,
+                current_admin,
+                success_message="角色已删除。",
+            )
+            return render_page("roles", context)
+        except (AppError, ValidationError, ValueError) as exc:
+            context = page_service.get_roles_context(
+                request,
+                current_admin,
+                error_message=page_service.format_exception_message(exc),
+            )
+            return render_page("roles", context, status_code=page_service.html_error_status(exc))
+
     create_form = {
         "name": str(form.get("name", "")),
         "code": str(form.get("code", "")),

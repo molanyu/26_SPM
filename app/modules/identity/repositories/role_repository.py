@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.modules.identity.models.permission import Permission
 from app.modules.identity.models.role import Role
 from app.modules.identity.models.role_permission import RolePermission
+from app.modules.identity.models.user_role import UserRole
 
 
 class RoleRepository:
@@ -80,3 +81,13 @@ class RoleRepository:
         self.session.add(role)
         self.session.commit()
         return self.get_by_id(role.id) or role
+
+    def has_user_assignments(self, role_id: int) -> bool:
+        stmt = select(UserRole.id).where(UserRole.role_id == role_id).limit(1)
+        return self.session.scalar(stmt) is not None
+
+    def delete_role(self, role: Role) -> None:
+        role.role_permissions.clear()
+        self.session.flush()
+        self.session.delete(role)
+        self.session.commit()

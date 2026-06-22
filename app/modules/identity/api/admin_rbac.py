@@ -124,6 +124,22 @@ def deactivate_role(
     }
 
 
+@router.delete(
+    "/roles/{role_id}",
+    dependencies=[Depends(require_admin_permission(IDENTITY_ROLES_WRITE))],
+)
+def delete_role(
+    role_id: int,
+    permission_service: PermissionService = Depends(get_permission_service),
+):
+    permission_service.delete_role(role_id)
+    return {
+        "success": True,
+        "message": "Role deleted successfully.",
+        "data": {"role_id": role_id},
+    }
+
+
 @router.get(
     "/permissions",
     dependencies=[Depends(require_admin_permission(IDENTITY_PERMISSIONS_READ))],

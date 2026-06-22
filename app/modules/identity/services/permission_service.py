@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from app.core.errors import AuthorizationError, BadRequestError, ConflictError, NotFoundError
+from app.modules.identity.constants import SYSTEM_ADMIN_ROLE_CODE
 from app.modules.identity.models.permission import Permission
 from app.modules.identity.models.role import Role
 from app.modules.identity.models.user import User
@@ -63,6 +64,16 @@ class PermissionService:
         if not role.is_active:
             raise BadRequestError("该角色已处于停用状态，无需重复操作。")
         return self.role_repository.deactivate_role(role)
+
+    def delete_role(self, role_id: int) -> None:
+        role = self.role_repository.get_by_id(role_id)
+        if role is None:
+            raise NotFoundError("未找到要删除的角色。")
+        if role.code == SYSTEM_ADMIN_ROLE_CODE:
+            raise BadRequestError("系统保留角色不能删除。")
+        if self.role_repository.has_user_assignments(role_id):
+            raise BadRequestError("该角色已分配给用户，请先解除分配或停用角色。")
+        self.role_repository.delete_role(role)
 
     def list_permissions(self) -> list[Permission]:
         return self.permission_repository.list_permissions()

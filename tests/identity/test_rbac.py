@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.core.database import SessionLocal
 from app.core.errors import AuthorizationError
 from app.core.security import verify_password
-from app.modules.identity.repositories.user_repository import UserRepository
+from app.modules.identity.constants import ADMIN_PORTAL_ACCESS, IDENTITY_ROLES_WRITE
+from app.modules.identity.models.permission import Permission
+from app.modules.identity.models.role import Role
+from app.modules.identity.models.role_permission import RolePermission
 from app.modules.identity.models.user import User
+from app.modules.identity.models.user_role import UserRole
+from app.modules.identity.repositories.user_repository import UserRepository
 from app.modules.identity.services.permission_service import PermissionService
 
 
@@ -458,3 +463,122 @@ def test_deactivate_role_success(client: TestClient, seed_data) -> None:
     assert payload["success"] is True
     assert payload["data"]["id"] == role_id
     assert payload["data"]["is_active"] is False
+
+
+def test_delete_unassigned_role_success_cleans_role_permissions(client: TestClient, seed_data) -> None:
+    login_response = _login_admin(
+        client,
+        seed_data["credentials"]["admin_email"],
+        seed_data["credentials"]["admin_password"],
+    )
+    assert login_response.status_code == 200
+
+    permission_id = seed_data["permissions"]["admin.portal.access"]
+    create_response = client.post(
+        "/admin/roles",
+        json={
+            "name": "Temporary Delete Role",
+            "code": "temporary_delete_role",
+            "description": "Created for delete test.",
+            "is_active": True,
+            "permission_ids": [permission_id],
+        },
+    )
+    assert create_response.status_code == 200
+    role_id = create_response.json()["data"]["id"]
+
+    delete_response = client.delete(f"/admin/roles/{role_id}")
+
+    assert delete_response.status_code == 200
+    payload = delete_response.json()
+    assert payload["success"] is True
+    assert payload["data"]["role_id"] == role_id
+
+    with SessionLocal() as session:
+        assert session.get(Role, role_id) is None
+        assert session.scalar(select(RolePermission).where(RolePermission.role_id == role_id)) is None
+        assert session.get(Permission, permission_id) is not None
+
+
+def test_delete_role_requires_roles_write_permission(client: TestClient, seed_data) -> None:
+    login_response = _login_admin(
+        client,
+        seed_data["credentials"]["limited_admin_email"],
+        seed_data["credentials"]["limited_admin_password"],
+    )
+    assert login_response.status_code == 200
+
+    response = client.delete(f"/admin/roles/{seed_data['roles']['viewer']}")
+
+    assert response.status_code == 403
+    assert response.json()["code"] == "forbidden"
+
+
+def test_delete_assigned_role_fails_and_preserves_assignments(client: TestClient, seed_data) -> None:
+    login_response = _login_admin(
+        client,
+        seed_data["credentials"]["admin_email"],
+        seed_data["credentials"]["admin_password"],
+    )
+    assert login_response.status_code == 200
+    role_id = seed_data["roles"]["operator"]
+    user_id = seed_data["users"]["limited_admin"]
+
+    response = client.delete(f"/admin/roles/{role_id}")
+
+    assert response.status_code == 400
+    payload = response.json()
+    assert payload["code"] == "bad_request"
+    assert "先解除分配或停用角色" in payload["message"]
+
+    with SessionLocal() as session:
+        assert session.get(Role, role_id) is not None
+        assert session.get(User, user_id) is not None
+        assert (
+            session.scalar(
+                select(UserRole).where(
+                    UserRole.user_id == user_id,
+                    UserRole.role_id == role_id,
+                )
+            )
+            is not None
+        )
+
+
+def test_delete_system_admin_role_fails_even_when_unassigned(client: TestClient, seed_data) -> None:
+    with SessionLocal() as session:
+        permissions = list(
+            session.scalars(
+                select(Permission).where(Permission.code.in_([ADMIN_PORTAL_ACCESS, IDENTITY_ROLES_WRITE]))
+            )
+        )
+        writer_role = Role(
+            name="Role Delete Writer",
+            code="role_delete_writer",
+            description="Allows testing protected system role deletion.",
+            is_active=True,
+        )
+        writer_role.role_permissions = [RolePermission(permission=permission) for permission in permissions]
+        session.add(writer_role)
+        session.flush()
+        session.add(UserRole(user_id=seed_data["users"]["target"], role=writer_role))
+        session.execute(delete(UserRole).where(UserRole.role_id == seed_data["roles"]["system_admin"]))
+        session.commit()
+
+    login_response = _login_admin(
+        client,
+        seed_data["credentials"]["target_email"],
+        seed_data["credentials"]["target_password"],
+    )
+    assert login_response.status_code == 200
+
+    response = client.delete(f"/admin/roles/{seed_data['roles']['system_admin']}")
+
+    assert response.status_code == 400
+    payload = response.json()
+    assert payload["code"] == "bad_request"
+    assert "系统保留角色" in payload["message"]
+
+    with SessionLocal() as session:
+        assert session.get(Role, seed_data["roles"]["system_admin"]) is not None
+        assert session.scalar(select(UserRole).where(UserRole.role_id == seed_data["roles"]["system_admin"])) is None

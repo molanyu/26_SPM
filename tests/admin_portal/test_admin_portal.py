@@ -1748,3 +1748,45 @@ def test_roles_page_can_deactivate_role(client: TestClient, seed_data: dict) -> 
     roles_payload = client.get("/admin/roles").json()["items"]
     deactivated_role = next(item for item in roles_payload if item["id"] == role_id)
     assert deactivated_role["is_active"] is False
+
+
+def test_roles_page_can_delete_unassigned_role(client: TestClient, seed_data: dict) -> None:
+    _login_admin(
+        client,
+        email=seed_data["credentials"]["admin_email"],
+        password=seed_data["credentials"]["admin_password"],
+    )
+
+    create_response = client.post(
+        "/admin/roles",
+        json={
+            "name": "Portal Delete Role",
+            "code": "portal_delete_role",
+            "description": "Created for admin portal delete flow.",
+            "is_active": True,
+            "permission_ids": [seed_data["permissions"]["admin.portal.access"]],
+        },
+    )
+    assert create_response.status_code == 200
+    role_id = create_response.json()["data"]["id"]
+
+    roles_page = client.get("/admin/roles", headers=HTML_HEADERS)
+    assert roles_page.status_code == 200
+    assert 'value="delete"' in roles_page.text
+    assert "删除角色" in roles_page.text
+
+    delete_response = _post_form(
+        client,
+        "/admin/roles/page",
+        {
+            "form_action": "delete",
+            "role_id": str(role_id),
+        },
+    )
+
+    assert delete_response.status_code == 200
+    assert delete_response.headers["content-type"].startswith("text/html")
+    assert "角色已删除" in delete_response.text
+
+    roles_payload = client.get("/admin/roles").json()["items"]
+    assert all(item["id"] != role_id for item in roles_payload)

@@ -235,6 +235,13 @@ def _render_role_card(role: dict[str, object]) -> str:
         if role["is_active"]
         else '<p class="muted">该角色已停用，历史分配会保留，但不会继续生效。</p>'
     )
+    delete_action_html = f"""
+<form method="post" action="/admin/roles/page" class="form-shell form-shell--compact">
+  <input type="hidden" name="form_action" value="delete">
+  <input type="hidden" name="role_id" value="{role['id']}">
+  <div class="form-actions"><button class="danger" type="submit">删除角色</button></div>
+</form>
+"""
     return f"""
 <article class="record-card" data-role-card="true">
   <div class="record-main">
@@ -256,6 +263,7 @@ def _render_role_card(role: dict[str, object]) -> str:
     <a class="action-link secondary-link" href="/admin/roles?edit_role_id={role['id']}#role-editor">编辑角色</a>
   </div>
   {deactivate_action_html}
+  {delete_action_html}
 </article>
 """
 
