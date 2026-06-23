@@ -7,6 +7,7 @@ IDENTITY_PERMISSIONS_READ = "identity.permissions.read"
 IDENTITY_USERS_WRITE = "identity.users.write"
 IDENTITY_USERS_ROLES_WRITE = "identity.users.roles.write"
 IDENTITY_DEPARTMENTS_WRITE = "identity.departments.write"
+VIOLATION_MANUAL_BLOCKS_WRITE = "violation.manual_blocks.write"
 SYSTEM_ADMIN_ROLE_CODE = "system_admin"
 SYSTEM_ADMIN_ROLE_NAME = "System Admin"
 
@@ -45,6 +46,11 @@ BASE_PERMISSION_DEFINITIONS = [
         "name": "维护院系",
         "code": IDENTITY_DEPARTMENTS_WRITE,
         "description": "允许查看、新增、启用和停用院系。",
+    },
+    {
+        "name": "维护手动预约限制",
+        "code": VIOLATION_MANUAL_BLOCKS_WRITE,
+        "description": "允许管理员手动开启和解除指定用户的预约限制。",
     },
 ]
 

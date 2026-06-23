@@ -35,6 +35,7 @@ from app.modules.violation.models.violation_record import (
     VIOLATION_TYPE_NO_SHOW_TIMEOUT,
     ViolationRecord,
 )
+from app.modules.violation.models.user_reservation_block import UserReservationBlock
 
 HTML_HEADERS = {"accept": "text/html"}
 TEMPLATE_ROOT = Path(__file__).resolve().parents[2] / "templates" / "admin"
@@ -1505,6 +1506,96 @@ def test_violations_page_renders_filtered_html_results(client: TestClient, seed_
     all_response = client.get("/admin/violations", headers=HTML_HEADERS)
     assert all_response.status_code == 200
     assert str(seeded["reservation_id"]) in all_response.text
+
+
+def test_violations_page_shows_user_summary_and_manual_block_forms(
+    client: TestClient,
+    seed_data: dict,
+) -> None:
+    seeded = _seed_violation_records(seed_data)
+    _login_admin(
+        client,
+        email=seed_data["credentials"]["admin_email"],
+        password=seed_data["credentials"]["admin_password"],
+    )
+
+    page = client.get(
+        "/admin/violations",
+        params={"user_id": seeded["user_id"]},
+        headers=HTML_HEADERS,
+    )
+
+    assert page.status_code == 200
+    assert "用户统计与限制状态" in page.text
+    assert "违约次数" in page.text
+    assert "未限制" in page.text
+    assert "开启手动限制" in page.text
+
+    activate = _post_form(
+        client,
+        f"/admin/violations/users/{seeded['user_id']}/manual-block",
+        {"reason": "Manual block from admin portal"},
+    )
+
+    assert activate.status_code == 200
+    assert "手动预约限制已开启" in activate.text
+    assert "限制中" in activate.text
+    assert "Manual block from admin portal" in activate.text
+    assert "解除手动限制" in activate.text
+
+    with SessionLocal() as session:
+        block = session.scalar(
+            select(UserReservationBlock).where(UserReservationBlock.user_id == seeded["user_id"])
+        )
+        assert block is not None
+        block_id = block.id
+
+    release = _post_form(
+        client,
+        f"/admin/violations/users/{seeded['user_id']}/manual-block/release",
+        {},
+    )
+
+    assert release.status_code == 200
+    assert "手动预约限制已解除" in release.text
+    assert "开启手动限制" in release.text
+    with SessionLocal() as session:
+        persisted = session.get(UserReservationBlock, block_id)
+        assert persisted is not None
+        assert persisted.released_at is not None
+
+
+def test_violations_page_hides_manual_block_forms_without_write_permission(
+    client: TestClient,
+    seed_data: dict,
+) -> None:
+    seeded = _seed_violation_records(seed_data)
+    with SessionLocal() as session:
+        session.add(UserRole(user_id=seed_data["users"]["target"], role_id=seed_data["roles"]["viewer"]))
+        session.commit()
+    _login_admin(
+        client,
+        email=seed_data["credentials"]["target_email"],
+        password=seed_data["credentials"]["target_password"],
+    )
+
+    page = client.get(
+        "/admin/violations",
+        params={"user_id": seeded["user_id"]},
+        headers=HTML_HEADERS,
+    )
+
+    assert page.status_code == 200
+    assert "用户统计与限制状态" in page.text
+    assert "开启手动限制" not in page.text
+    assert "解除手动限制" not in page.text
+
+    forbidden = _post_form(
+        client,
+        f"/admin/violations/users/{seeded['user_id']}/manual-block",
+        {"reason": "Should fail"},
+    )
+    assert forbidden.status_code == 403
 
 
 def test_violations_page_returns_html_bad_request_for_invalid_date_range(client: TestClient, seed_data: dict) -> None:

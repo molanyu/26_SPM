@@ -18,6 +18,7 @@ LEGACY_PERMISSION_CODES = [
 ]
 BACKFILLED_PERMISSION_CODE = "identity.users.write"
 DEPARTMENTS_PERMISSION_CODE = "identity.departments.write"
+MANUAL_BLOCKS_PERMISSION_CODE = "violation.manual_blocks.write"
 SYSTEM_ADMIN_ROLE_CODE = "system_admin"
 ROOT_DIR = Path(__file__).resolve().parents[2]
 
@@ -160,7 +161,11 @@ def test_upgrade_backfills_identity_users_write_for_legacy_database(
         command.upgrade(config, "head")
 
         with engine.connect() as connection:
-            for permission_code in (BACKFILLED_PERMISSION_CODE, DEPARTMENTS_PERMISSION_CODE):
+            for permission_code in (
+                BACKFILLED_PERMISSION_CODE,
+                DEPARTMENTS_PERMISSION_CODE,
+                MANUAL_BLOCKS_PERMISSION_CODE,
+            ):
                 permission_count = connection.execute(
                     sa.text("SELECT COUNT(*) FROM permissions WHERE code = :code"),
                     {"code": permission_code},
@@ -217,7 +222,11 @@ def test_upgrade_backfills_permission_definition_without_existing_system_admin_r
         command.upgrade(config, "head")
 
         with engine.connect() as connection:
-            for permission_code in (BACKFILLED_PERMISSION_CODE, DEPARTMENTS_PERMISSION_CODE):
+            for permission_code in (
+                BACKFILLED_PERMISSION_CODE,
+                DEPARTMENTS_PERMISSION_CODE,
+                MANUAL_BLOCKS_PERMISSION_CODE,
+            ):
                 permission_count = connection.execute(
                     sa.text("SELECT COUNT(*) FROM permissions WHERE code = :code"),
                     {"code": permission_code},

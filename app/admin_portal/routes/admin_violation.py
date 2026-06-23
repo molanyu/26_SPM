@@ -9,13 +9,14 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.admin_portal.routes.dependencies import require_admin_portal_permission
+from app.admin_portal.routes.form_parser import parse_simple_form
 from app.admin_portal.services.html_renderer import render_page
 from app.admin_portal.services.page_service import AdminPageService, prefers_html
 from app.core.database import get_db
 from app.core.errors import AppError, BadRequestError
-from app.modules.identity.constants import IDENTITY_PERMISSIONS_READ
+from app.modules.identity.constants import IDENTITY_PERMISSIONS_READ, VIOLATION_MANUAL_BLOCKS_WRITE
 from app.modules.identity.models.user import User
-from app.modules.violation.schemas.violation import ViolationQueryFilters
+from app.modules.violation.schemas.violation import ManualBlockCreateRequest, ViolationQueryFilters
 
 router = APIRouter(prefix="/admin", tags=["admin-portal-violation"])
 
@@ -114,6 +115,14 @@ def _build_filters_from_raw(
         raise BadRequestError(str(error_message)) from exc
 
 
+def _manual_block_success_response(message: str, data: dict[str, object]) -> dict[str, object]:
+    return {
+        "success": True,
+        "message": message,
+        "data": data,
+    }
+
+
 @router.get("/violations")
 def violations_page(
     request: Request,
@@ -190,6 +199,8 @@ def violations_page(
             error_message=page_service.format_exception_message(exc),
             violations=[],
             total=0,
+            user_summary=None,
+            can_manage_manual_blocks=False,
             filters=_build_filter_state(
                 user_id=user_id,
                 student_no=student_no,
@@ -199,5 +210,95 @@ def violations_page(
                 page=page,
                 page_size=page_size,
             ),
+        )
+        return render_page("violations", context, status_code=page_service.html_error_status(exc))
+
+
+@router.post("/violations/users/{user_id}/manual-block")
+async def activate_manual_block(
+    request: Request,
+    user_id: int,
+    current_admin: User | RedirectResponse = Depends(
+        require_admin_portal_permission(VIOLATION_MANUAL_BLOCKS_WRITE),
+    ),
+    page_service: AdminPageService = Depends(get_page_service),
+):
+    if isinstance(current_admin, RedirectResponse):
+        return current_admin
+    wants_html = prefers_html(request)
+    try:
+        if wants_html:
+            form = await parse_simple_form(request)
+            payload = ManualBlockCreateRequest.model_validate({"reason": str(form.get("reason", ""))})
+        else:
+            body = await request.json()
+            payload = ManualBlockCreateRequest.model_validate(body)
+        data = page_service.activate_manual_block_payload(
+            user_id=user_id,
+            reason=payload.reason,
+            admin_user_id=current_admin.id,
+        )
+        if not wants_html:
+            return _manual_block_success_response("Manual reservation block activated.", data)
+        context = page_service.get_violations_context(
+            request,
+            current_admin,
+            user_id=user_id,
+            success_message="手动预约限制已开启。",
+        )
+        return render_page("violations", context)
+    except AppError as exc:
+        if not wants_html:
+            return _app_error_response(exc)
+        context = page_service.get_violations_context(
+            request,
+            current_admin,
+            user_id=user_id,
+            error_message=page_service.format_exception_message(exc),
+        )
+        return render_page("violations", context, status_code=page_service.html_error_status(exc))
+    except ValidationError as exc:
+        if not wants_html:
+            return _validation_error_response(page_service, exc)
+        context = page_service.get_violations_context(
+            request,
+            current_admin,
+            user_id=user_id,
+            error_message=page_service.format_exception_message(exc),
+        )
+        return render_page("violations", context, status_code=page_service.html_error_status(exc))
+
+
+@router.post("/violations/users/{user_id}/manual-block/release")
+async def release_manual_block(
+    request: Request,
+    user_id: int,
+    current_admin: User | RedirectResponse = Depends(
+        require_admin_portal_permission(VIOLATION_MANUAL_BLOCKS_WRITE),
+    ),
+    page_service: AdminPageService = Depends(get_page_service),
+):
+    if isinstance(current_admin, RedirectResponse):
+        return current_admin
+    wants_html = prefers_html(request)
+    try:
+        data = page_service.release_manual_block_payload(user_id=user_id, admin_user_id=current_admin.id)
+        if not wants_html:
+            return _manual_block_success_response("Manual reservation block released.", data)
+        context = page_service.get_violations_context(
+            request,
+            current_admin,
+            user_id=user_id,
+            success_message="手动预约限制已解除。",
+        )
+        return render_page("violations", context)
+    except AppError as exc:
+        if not wants_html:
+            return _app_error_response(exc)
+        context = page_service.get_violations_context(
+            request,
+            current_admin,
+            user_id=user_id,
+            error_message=page_service.format_exception_message(exc),
         )
         return render_page("violations", context, status_code=page_service.html_error_status(exc))

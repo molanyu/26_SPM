@@ -16,6 +16,7 @@ from app.modules.identity.constants import (
     IDENTITY_ROLES_WRITE,
     IDENTITY_USERS_WRITE,
     IDENTITY_USERS_ROLES_WRITE,
+    VIOLATION_MANUAL_BLOCKS_WRITE,
 )
 from app.modules.identity.models.department import Department
 from app.modules.identity.models.permission import Permission
@@ -55,6 +56,11 @@ def _seed_identity_data() -> dict[str, dict[str, int] | dict[str, str]]:
                 name="Manage Departments",
                 code=IDENTITY_DEPARTMENTS_WRITE,
                 description="Allows managing departments.",
+            ),
+            Permission(
+                name="Manage Manual Reservation Blocks",
+                code=VIOLATION_MANUAL_BLOCKS_WRITE,
+                description="Allows manually blocking and releasing user reservation access.",
             ),
         ]
         session.add_all(permissions)

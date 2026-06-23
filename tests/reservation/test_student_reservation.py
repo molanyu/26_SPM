@@ -25,6 +25,7 @@ from app.modules.resource.models.seat import Seat
 from app.modules.resource.models.study_room import StudyRoom
 from app.modules.system_config.services.config_service import ConfigService
 from app.modules.violation.models.violation_record import VIOLATION_TYPE_NO_SHOW_TIMEOUT, ViolationRecord
+from app.modules.violation.services.violation_service import ViolationService
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 MINIPROGRAM_RESERVATIONS_JS = WORKSPACE_ROOT / "miniprogram" / "pages" / "reservations" / "reservations.js"
@@ -431,6 +432,40 @@ def test_invisible_or_inactive_resources_are_rejected(client: TestClient, seed_d
 def test_penalized_student_cannot_create_reservation_before_write(client: TestClient, seed_data: dict):
     resource_ids = _seed_reservation_resources(seed_data)
     _seed_active_penalty_records(seed_data, resource_ids)
+    headers = _login_student(
+        client,
+        student_no=seed_data["credentials"]["student_no"],
+        password=seed_data["credentials"]["student_password"],
+    )
+    start_time, end_time = _future_slot(start_hour=10, duration_hours=2)
+
+    with SessionLocal() as session:
+        before_count = session.query(Reservation).count()
+
+    response = client.post(
+        "/student/reservations",
+        headers=headers,
+        json={
+            "seat_id": resource_ids["cs_second_seat"],
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "bad_request"
+    with SessionLocal() as session:
+        assert session.query(Reservation).count() == before_count
+
+
+def test_manually_blocked_student_cannot_create_reservation_before_write(client: TestClient, seed_data: dict):
+    resource_ids = _seed_reservation_resources(seed_data)
+    with SessionLocal() as session:
+        ViolationService(session).activate_manual_reservation_block(
+            seed_data["users"]["student"],
+            "Manual block before student reservation",
+            seed_data["users"]["admin"],
+        )
     headers = _login_student(
         client,
         student_no=seed_data["credentials"]["student_no"],

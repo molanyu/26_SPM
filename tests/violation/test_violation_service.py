@@ -18,6 +18,7 @@ from app.modules.violation.models.violation_record import (
     VIOLATION_TYPE_NO_SHOW_TIMEOUT,
     ViolationRecord,
 )
+from app.modules.violation.models.user_reservation_block import UserReservationBlock
 from app.modules.violation.services.checkin_violation_service import CheckinViolationService
 from app.modules.violation.services.violation_service import ViolationService
 
@@ -304,3 +305,117 @@ def test_penalty_status_query_is_read_only(client, seed_data: dict):
         assert session.get(Reservation, reservation_id).status == before_status
         assert session.query(ViolationRecord).count() == before_violation_count
         assert session.get(User, seed_data["users"]["student"]).updated_at == before_user_updated_at
+
+
+def test_manual_block_makes_penalty_status_active_without_creating_violation(client, seed_data: dict):
+    with SessionLocal() as session:
+        ConfigService(session).list_configs()
+        before_violation_count = session.query(ViolationRecord).count()
+        block = ViolationService(session).activate_manual_reservation_block(
+            seed_data["users"]["student"],
+            "Repeated no-show follow-up",
+            seed_data["users"]["admin"],
+        )
+
+        status = ViolationService(session).get_user_penalty_status(seed_data["users"]["student"])
+
+    assert block.user_id == seed_data["users"]["student"]
+    assert status.is_penalized is True
+    assert status.restriction_source == "MANUAL_BLOCK"
+    assert status.manual_block_id == block.id
+    assert status.manual_block_reason == "Repeated no-show follow-up"
+    with SessionLocal() as session:
+        assert session.query(ViolationRecord).count() == before_violation_count
+
+
+def test_manual_block_activation_is_idempotent(client, seed_data: dict):
+    with SessionLocal() as session:
+        ConfigService(session).list_configs()
+        service = ViolationService(session)
+        first = service.activate_manual_reservation_block(
+            seed_data["users"]["student"],
+            "First reason",
+            seed_data["users"]["admin"],
+        )
+        second = service.activate_manual_reservation_block(
+            seed_data["users"]["student"],
+            "Second reason should not create another active block",
+            seed_data["users"]["admin"],
+        )
+
+    with SessionLocal() as session:
+        active_blocks = (
+            session.query(UserReservationBlock)
+            .filter(
+                UserReservationBlock.user_id == seed_data["users"]["student"],
+                UserReservationBlock.released_at.is_(None),
+            )
+            .all()
+        )
+
+    assert first.id == second.id
+    assert len(active_blocks) == 1
+    assert active_blocks[0].reason == "First reason"
+
+
+def test_manual_block_release_preserves_history_and_removes_manual_source(client, seed_data: dict):
+    with SessionLocal() as session:
+        ConfigService(session).list_configs()
+        service = ViolationService(session)
+        block = service.activate_manual_reservation_block(
+            seed_data["users"]["student"],
+            "Temporary manual block",
+            seed_data["users"]["admin"],
+        )
+        released = service.release_manual_reservation_block(
+            seed_data["users"]["student"],
+            seed_data["users"]["admin"],
+        )
+        status = ViolationService(session).get_user_penalty_status(seed_data["users"]["student"])
+
+    assert released.id == block.id
+    assert released.released_at is not None
+    assert released.released_by_admin_id == seed_data["users"]["admin"]
+    assert status.is_penalized is False
+    assert status.restriction_source == "NONE"
+    with SessionLocal() as session:
+        persisted = session.get(UserReservationBlock, block.id)
+        assert persisted is not None
+        assert persisted.released_at is not None
+
+
+def test_manual_release_without_active_block_fails(client, seed_data: dict):
+    with SessionLocal() as session:
+        ConfigService(session).list_configs()
+        try:
+            ViolationService(session).release_manual_reservation_block(
+                seed_data["users"]["student"],
+                seed_data["users"]["admin"],
+            )
+        except Exception as exc:
+            assert getattr(exc, "code", None) == "bad_request"
+        else:
+            raise AssertionError("release should fail without an active manual block")
+
+
+def test_penalty_status_reports_auto_and_manual_sources_together(client, seed_data: dict):
+    as_of = datetime.now().replace(minute=0, second=0, microsecond=0)
+    for occurred_at in [as_of - timedelta(days=3), as_of - timedelta(days=2), as_of - timedelta(days=1)]:
+        _seed_timeout_violation(seed_data, occurred_at=occurred_at)
+
+    with SessionLocal() as session:
+        ConfigService(session).list_configs()
+        ViolationService(session).activate_manual_reservation_block(
+            seed_data["users"]["student"],
+            "Manual block while auto penalty is active",
+            seed_data["users"]["admin"],
+        )
+        status = ViolationService(session).get_user_penalty_status(
+            seed_data["users"]["student"],
+            as_of=as_of,
+        )
+
+    assert status.is_penalized is True
+    assert status.restriction_source == "AUTO_AND_MANUAL"
+    assert status.penalty_start == as_of - timedelta(days=1)
+    assert status.manual_block_id is not None

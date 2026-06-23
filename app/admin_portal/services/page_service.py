@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.admin_portal.services.menu_service import AdminPortalMenuService
 from app.core.errors import AppError
 from app.modules.checkin.services.admin_checkin_service import AdminCheckinService
-from app.modules.identity.constants import IDENTITY_USERS_ROLES_WRITE
+from app.modules.identity.constants import IDENTITY_USERS_ROLES_WRITE, VIOLATION_MANUAL_BLOCKS_WRITE
 from app.modules.identity.models.role import Role
 from app.modules.identity.models.user import User
 from app.modules.identity.schemas.department import DepartmentRead as ManagedDepartmentRead
@@ -29,6 +29,7 @@ from app.modules.resource.services.room_service import RoomService
 from app.modules.resource.services.seat_service import SeatService
 from app.modules.violation.schemas.statistics import StatisticsQueryFilters
 from app.modules.violation.schemas.violation import ViolationQueryFilters
+from app.modules.violation.services.manual_block_service import ManualBlockService
 from app.modules.violation.services.query_service import QueryService
 from app.modules.violation.services.statistics_service import StatisticsService
 
@@ -61,6 +62,10 @@ _PERMISSION_UI_COPY = {
         "name": "维护院系",
         "description": "允许查看、新增、启用和停用院系。",
     },
+    "violation.manual_blocks.write": {
+        "name": "维护手动预约限制",
+        "description": "允许手动开启和解除指定用户的预约限制。",
+    },
 }
 
 
@@ -82,6 +87,7 @@ class AdminPageService:
         self.admin_notification_service = AdminNotificationService(session)
         self.query_service = QueryService(session)
         self.statistics_service = StatisticsService(session)
+        self.manual_block_service = ManualBlockService(session)
         self.menu_service = AdminPortalMenuService()
 
     def build_base_context(
@@ -669,6 +675,7 @@ class AdminPageService:
             "total": result.total,
             "page": result.page,
             "page_size": result.page_size,
+            "user_summary": result.user_summary.model_dump() if result.user_summary else None,
         }
 
     def get_violations_context(
@@ -696,6 +703,7 @@ class AdminPageService:
             page_size=page_size,
         )
         payload = self.list_violations_payload(filters)
+        permission_codes = {permission.code for permission in self.permission_service.get_user_permissions(current_admin.id)}
         return self.build_base_context(
             request,
             current_admin,
@@ -706,8 +714,29 @@ class AdminPageService:
             success_message=success_message,
             violations=payload["items"],
             total=payload["total"],
+            user_summary=payload["user_summary"],
+            can_manage_manual_blocks=VIOLATION_MANUAL_BLOCKS_WRITE in permission_codes,
             filters=filters.model_dump(),
         )
+
+    def activate_manual_block_payload(self, *, user_id: int, reason: str, admin_user_id: int) -> dict[str, object]:
+        block = self.manual_block_service.activate_manual_reservation_block(
+            user_id=user_id,
+            reason=reason,
+            admin_user_id=admin_user_id,
+        )
+        return self.manual_block_service.build_action_read(user_id=user_id, manual_block_id=block.id).model_dump()
+
+    def release_manual_block_payload(self, *, user_id: int, admin_user_id: int) -> dict[str, object]:
+        block = self.manual_block_service.release_manual_reservation_block(
+            user_id=user_id,
+            admin_user_id=admin_user_id,
+        )
+        return self.manual_block_service.build_action_read(
+            user_id=user_id,
+            manual_block_id=block.id,
+            released_at=block.released_at,
+        ).model_dump()
 
     def format_exception_message(self, exc: Exception) -> str:
         if isinstance(exc, AppError):

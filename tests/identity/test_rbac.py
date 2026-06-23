@@ -113,6 +113,7 @@ def test_list_permissions_success(client: TestClient, seed_data) -> None:
     payload = response.json()
     assert payload["total"] >= 6
     assert any(item["code"] == "identity.users.roles.write" for item in payload["items"])
+    assert any(item["code"] == "violation.manual_blocks.write" for item in payload["items"])
 
 
 def test_create_student_user_success(client: TestClient, seed_data) -> None:

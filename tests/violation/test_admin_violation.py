@@ -12,10 +12,12 @@ from app.modules.reservation.models.reservation import (
 )
 from app.modules.resource.models.seat import Seat
 from app.modules.resource.models.study_room import StudyRoom
+from app.modules.identity.models.user_role import UserRole
 from app.modules.violation.models.violation_record import (
     VIOLATION_TYPE_NO_SHOW_TIMEOUT,
     ViolationRecord,
 )
+from app.modules.violation.models.user_reservation_block import UserReservationBlock
 
 
 def _login_admin(client: TestClient, *, email: str, password: str) -> None:
@@ -174,6 +176,70 @@ def test_admin_can_query_violations_with_supported_filters(client: TestClient, s
     assert today_items[0]["room_id"] == resource_ids["cs_room"]
 
 
+def test_admin_violation_query_returns_single_user_summary(client: TestClient, seed_data: dict):
+    resource_ids = _seed_violation_records(seed_data)
+    _login_admin(
+        client,
+        email=seed_data["credentials"]["admin_email"],
+        password=seed_data["credentials"]["admin_password"],
+    )
+
+    response = client.get("/admin/violations", params={"user_id": resource_ids["student_user"]})
+
+    assert response.status_code == 200
+    summary = response.json()["user_summary"]
+    assert summary["user_id"] == resource_ids["student_user"]
+    assert summary["student_no"] == resource_ids["student_no"]
+    assert summary["violation_count"] == 1
+    assert summary["is_penalized"] is False
+    assert summary["restriction_source"] == "NONE"
+
+
+def test_manual_block_endpoints_activate_and_release_with_write_permission(
+    client: TestClient,
+    seed_data: dict,
+):
+    _seed_violation_records(seed_data)
+    _login_admin(
+        client,
+        email=seed_data["credentials"]["admin_email"],
+        password=seed_data["credentials"]["admin_password"],
+    )
+
+    activate = client.post(
+        f"/admin/violations/users/{seed_data['users']['student']}/manual-block",
+        json={"reason": "Manual block from admin API"},
+    )
+
+    assert activate.status_code == 200
+    activate_payload = activate.json()
+    assert activate_payload["success"] is True
+    assert activate_payload["data"]["is_penalized"] is True
+    assert activate_payload["data"]["restriction_source"] == "MANUAL_BLOCK"
+    block_id = activate_payload["data"]["manual_block_id"]
+    with SessionLocal() as session:
+        assert session.get(UserReservationBlock, block_id) is not None
+        assert session.query(ViolationRecord).count() == 2
+
+    duplicate = client.post(
+        f"/admin/violations/users/{seed_data['users']['student']}/manual-block",
+        json={"reason": "Second request should be idempotent"},
+    )
+    assert duplicate.status_code == 200
+    assert duplicate.json()["data"]["manual_block_id"] == block_id
+
+    release = client.post(f"/admin/violations/users/{seed_data['users']['student']}/manual-block/release")
+
+    assert release.status_code == 200
+    release_payload = release.json()
+    assert release_payload["data"]["manual_block_id"] == block_id
+    assert release_payload["data"]["released_at"] is not None
+    with SessionLocal() as session:
+        persisted = session.get(UserReservationBlock, block_id)
+        assert persisted is not None
+        assert persisted.released_at is not None
+
+
 def test_unauthenticated_and_limited_admin_cannot_query_violations(client: TestClient, seed_data: dict):
     _seed_violation_records(seed_data)
 
@@ -189,3 +255,27 @@ def test_unauthenticated_and_limited_admin_cannot_query_violations(client: TestC
     forbidden = client.get("/admin/violations")
     assert forbidden.status_code == 403
     assert forbidden.json()["code"] == "forbidden"
+
+
+def test_manual_block_write_permission_is_not_required_for_get_but_is_required_for_post(
+    client: TestClient,
+    seed_data: dict,
+):
+    with SessionLocal() as session:
+        session.add(UserRole(user_id=seed_data["users"]["target"], role_id=seed_data["roles"]["viewer"]))
+        session.commit()
+    _login_admin(
+        client,
+        email=seed_data["credentials"]["target_email"],
+        password=seed_data["credentials"]["target_password"],
+    )
+
+    get_response = client.get("/admin/violations")
+    assert get_response.status_code == 200
+
+    post_response = client.post(
+        f"/admin/violations/users/{seed_data['users']['student']}/manual-block",
+        json={"reason": "Should be forbidden"},
+    )
+    assert post_response.status_code == 403
+    assert post_response.json()["code"] == "forbidden"

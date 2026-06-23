@@ -885,6 +885,8 @@ def _render_simple_room_options(rooms: Iterable[dict[str, object]], selected_roo
 
 def _build_violations_context(context: dict[str, object]) -> dict[str, object]:
     filters = context["filters"]
+    user_summary = context.get("user_summary")
+    can_manage_manual_blocks = bool(context.get("can_manage_manual_blocks"))
     violation_rows_html = "".join(
         f"""
 <tr>
@@ -910,7 +912,72 @@ def _build_violations_context(context: dict[str, object]) -> dict[str, object]:
         "filter_page_size": _optional(filters.get("page_size")),
         "violations_total": context["total"],
         "violation_rows_html": violation_rows_html,
+        "user_summary_html": _render_violation_user_summary(user_summary, can_manage_manual_blocks),
     }
+
+
+def _render_violation_user_summary(summary: object, can_manage_manual_blocks: bool) -> str:
+    if not isinstance(summary, dict):
+        return '<p class="muted">输入用户 ID 或学生学号后显示单用户违约次数和预约限制状态。</p>'
+
+    user_id = int(summary["user_id"])
+    is_penalized = bool(summary["is_penalized"])
+    status_label = "限制中" if is_penalized else "未限制"
+    source_label = _restriction_source_label(str(summary["restriction_source"]))
+    details = [
+        ("用户 ID", str(summary["user_id"])),
+        ("学生学号", str(summary.get("student_no") or "未记录")),
+        ("违约次数", str(summary["violation_count"])),
+        ("预约限制", status_label),
+        ("限制来源", source_label),
+    ]
+    if summary.get("penalty_start") or summary.get("penalty_end"):
+        details.append(("自动惩罚期", f"{_optional(summary.get('penalty_start'))} 至 {_optional(summary.get('penalty_end'))}"))
+    if summary.get("manual_block_id"):
+        details.append(("手动限制", f"#{summary['manual_block_id']}"))
+    if summary.get("manual_block_reason"):
+        details.append(("限制原因", str(summary["manual_block_reason"])))
+    if summary.get("manual_block_started_at"):
+        details.append(("开启时间", str(summary["manual_block_started_at"])))
+
+    detail_html = "".join(
+        f"<div><dt>{escape(label)}</dt><dd>{escape(value)}</dd></div>"
+        for label, value in details
+    )
+    actions_html = _render_manual_block_actions(summary, can_manage_manual_blocks, user_id)
+    return f"""
+<div class="result-box">
+  <dl class="metric-grid">{detail_html}</dl>
+  {actions_html}
+</div>
+"""
+
+
+def _render_manual_block_actions(summary: dict[str, object], can_manage_manual_blocks: bool, user_id: int) -> str:
+    if not can_manage_manual_blocks:
+        return ""
+    if summary.get("manual_block_id"):
+        return f"""
+<form method="post" action="/admin/violations/users/{user_id}/manual-block/release" class="form-shell form-shell--compact">
+  <div class="form-actions"><button class="secondary" type="submit">解除手动限制</button></div>
+</form>
+"""
+    return f"""
+<form method="post" action="/admin/violations/users/{user_id}/manual-block" class="form-shell form-shell--compact">
+  <label>限制原因<input name="reason" required></label>
+  <div class="form-actions"><button class="secondary" type="submit">开启手动限制</button></div>
+</form>
+"""
+
+
+def _restriction_source_label(value: str) -> str:
+    labels = {
+        "NONE": "无",
+        "AUTO_VIOLATION": "自动违约惩罚",
+        "MANUAL_BLOCK": "手动限制",
+        "AUTO_AND_MANUAL": "自动违约惩罚 + 手动限制",
+    }
+    return labels.get(value, value)
 
 
 def _build_notifications_context(context: dict[str, object]) -> dict[str, object]:

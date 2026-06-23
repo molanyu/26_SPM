@@ -17,6 +17,7 @@ from app.modules.resource.models.seat import Seat
 from app.modules.resource.models.study_room import StudyRoom
 from app.modules.system_config.services.config_service import ConfigService
 from app.modules.violation.models.violation_record import VIOLATION_TYPE_NO_SHOW_TIMEOUT, ViolationRecord
+from app.modules.violation.services.violation_service import ViolationService
 
 
 def _login_admin(client: TestClient, *, email: str, password: str) -> None:
@@ -318,6 +319,42 @@ def test_admin_create_reservation_rejects_penalized_target_before_write(
         room_id=resource_ids["math_room"],
         seat_id=resource_ids["math_seat"],
     )
+    _login_admin(
+        client,
+        email=seed_data["credentials"]["admin_email"],
+        password=seed_data["credentials"]["admin_password"],
+    )
+    start_time, end_time = _future_slot(start_hour=10, duration_hours=2)
+    with SessionLocal() as session:
+        before_count = session.query(Reservation).count()
+
+    response = client.post(
+        "/admin/reservations",
+        json={
+            "user_id": resource_ids["math_student"],
+            "seat_id": resource_ids["math_second_seat"],
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "bad_request"
+    with SessionLocal() as session:
+        assert session.query(Reservation).count() == before_count
+
+
+def test_admin_create_reservation_rejects_manually_blocked_target_before_write(
+    client: TestClient,
+    seed_data: dict,
+):
+    resource_ids = _seed_admin_reservation_resources(seed_data)
+    with SessionLocal() as session:
+        ViolationService(session).activate_manual_reservation_block(
+            resource_ids["math_student"],
+            "Manual block before admin reservation",
+            seed_data["users"]["admin"],
+        )
     _login_admin(
         client,
         email=seed_data["credentials"]["admin_email"],

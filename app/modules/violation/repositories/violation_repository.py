@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, time, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import distinct, func, select
 from sqlalchemy.orm import Session
 
 from app.modules.identity.models.user import User
@@ -54,6 +54,31 @@ class ViolationRepository:
         ).subquery()
         statement = select(func.count()).select_from(unique_records)
         return int(self.session.scalar(statement) or 0)
+
+    def count_unique_no_show_violations_for_user(self, *, user_id: int) -> int:
+        statement = select(func.count(distinct(ViolationRecord.reservation_id))).where(
+            ViolationRecord.user_id == user_id,
+            ViolationRecord.violation_type == VIOLATION_TYPE_NO_SHOW_TIMEOUT,
+        )
+        return int(self.session.scalar(statement) or 0)
+
+    def find_user_for_summary(
+        self,
+        *,
+        user_id: int | None,
+        student_no: str | None,
+    ) -> tuple[int, str | None] | None:
+        statement = select(User.id, User.student_no)
+        if user_id is not None:
+            statement = statement.where(User.id == user_id)
+        if student_no is not None:
+            statement = statement.where(User.student_no == student_no)
+        if user_id is None and student_no is None:
+            return None
+        row = self.session.execute(statement).one_or_none()
+        if row is None:
+            return None
+        return int(row[0]), row[1]
 
     def list_unique_no_show_occurred_at_for_penalty(
         self,

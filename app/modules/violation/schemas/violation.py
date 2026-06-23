@@ -6,6 +6,7 @@ from typing import Literal, Self
 from pydantic import BaseModel, model_validator
 
 ViolationType = Literal["NO_SHOW_TIMEOUT"]
+RestrictionSource = Literal["NONE", "AUTO_VIOLATION", "MANUAL_BLOCK", "AUTO_AND_MANUAL"]
 
 
 class ViolationQueryFilters(BaseModel):
@@ -44,8 +45,47 @@ class ViolationRecordRead(BaseModel):
 
 class UserPenaltyStatusRead(BaseModel):
     is_penalized: bool
+    restriction_source: RestrictionSource = "NONE"
     violation_count: int
     window_start: datetime
     window_end: datetime
     penalty_start: datetime | None = None
     penalty_end: datetime | None = None
+    manual_block_id: int | None = None
+    manual_block_reason: str | None = None
+    manual_block_started_at: datetime | None = None
+    manual_block_created_by: int | None = None
+
+
+class UserViolationSummaryRead(BaseModel):
+    user_id: int
+    student_no: str | None = None
+    violation_count: int
+    is_penalized: bool
+    restriction_source: RestrictionSource
+    penalty_start: datetime | None = None
+    penalty_end: datetime | None = None
+    manual_block_id: int | None = None
+    manual_block_reason: str | None = None
+    manual_block_started_at: datetime | None = None
+
+
+class ManualBlockCreateRequest(BaseModel):
+    reason: str
+
+    @model_validator(mode="after")
+    def validate_reason(self) -> Self:
+        self.reason = self.reason.strip()
+        if not self.reason:
+            raise ValueError("手动限制原因不能为空。")
+        return self
+
+
+class ManualBlockActionRead(BaseModel):
+    user_id: int
+    manual_block_id: int
+    is_penalized: bool
+    restriction_source: RestrictionSource
+    manual_block_reason: str | None = None
+    manual_block_started_at: datetime | None = None
+    released_at: datetime | None = None
