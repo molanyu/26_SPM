@@ -339,3 +339,26 @@ app/modules/identity/api/admin_rbac.py
 - 删除用户。
 - 强制删除已分配角色。
 - 为角色删除新增审计日志或回收站机制。
+
+## 16. Spec 增补（2026-06-23）
+
+本轮补入 `violation.manual_blocks.write` 权限点契约，目标是支撑 `violation` 模块的管理员手动预约限制开启和解除接口。
+
+范围固定如下：
+
+- 新增基础权限点 `violation.manual_blocks.write`。
+- 该权限用于允许管理员手动开启和解除指定用户的预约限制。
+- 该权限只控制手动预约限制写操作，不改变违约记录查询权限、预约创建规则或系统配置规则。
+- 冷启动 bootstrap 必须将 `violation.manual_blocks.write` 纳入基础权限创建范围。
+- 旧库必须通过受控 Alembic migration 补齐 `violation.manual_blocks.write` 权限定义。
+- 如果 `system_admin` 角色存在，migration 只补齐该角色缺失的 `violation.manual_blocks.write` 绑定。
+- migration 不得修改 `system_admin` 或其他角色的 `is_active` 状态。
+- migration 不得修改既有用户、角色分配、其他权限绑定或其他系统配置。
+- 后续代码实现必须同步更新 identity 权限 constants、bootstrap 基础权限列表、Alembic migration 和对应权限测试。
+
+不包含以下内容：
+
+- 新增角色。
+- 修改角色启停状态。
+- 修改已有非 `system_admin` 角色的权限绑定。
+- 放宽 bootstrap 对已有角色和管理员账号的 create-only 边界。

@@ -206,6 +206,8 @@
 - 违约记录生成
 - 违约记录查询
 - 违约统计基础能力
+- 自动违约惩罚与手动预约限制的统一状态查询
+- 管理员手动开启和解除用户预约限制
 
 覆盖故事：
 
@@ -273,7 +275,7 @@
 - `reservation` -> `identity`
 - `reservation` -> `resource`
 - `reservation` -> `system_config`
-- `reservation` -> `violation`（仅限公开只读 service，用于预约前惩罚资格判断）
+- `reservation` -> `violation`（仅限公开只读 service，用于预约前统一预约限制判断）
 - `checkin` -> `reservation`
 - `checkin` -> `resource`
 - `checkin` -> `system_config`
@@ -294,6 +296,7 @@
 - `repositories` 不跨模块直接写入数据
 - `admin_portal` 不直接操作 `repositories`
 - `admin_portal` 执行角色停用或删除时，只能调用 `identity` 公开 service，不得直接操作 `identity` repository 或 model
+- `admin_portal` 执行手动开启或解除用户预约限制时，只能调用 `violation` 公开 service 或管理端 API，不得直接操作 `violation` repository 或 model
 - `api` 不直接操作其他模块的 `models`
 
 跨模块协作规则：
@@ -301,7 +304,7 @@
 - 只能通过对方模块的 service 层进入
 - 不允许直接调用对方 repository
 - 不允许直接修改对方 model 状态
-- `reservation` 读取 `violation` 时只能消费惩罚资格公开只读 service，不得生成或修改违约记录
+- `reservation` 读取 `violation` 时只能消费统一预约限制公开只读 service，不得生成或修改违约记录，也不得读取或修改手动限制记录
 - `violation` 读取 `system_config` 时只能通过公开配置读取 service 获取违约累计与惩罚参数
 
 ## 7. 业务主线
@@ -323,7 +326,7 @@
 
 - `reservation` 负责预约建立和取消
 - `checkin` 负责签到确认
-- `violation` 负责违约落账
+- `violation` 负责违约落账、自动惩罚状态计算和手动预约限制状态维护
 - `notification` 负责提醒触发
 
 ## 8. 目录结构
@@ -428,7 +431,7 @@ app/
 - 资源规则归 `resource`
 - 预约规则归 `reservation`
 - 签到规则归 `checkin`
-- 违约规则归 `violation`
+- 违约规则、自动违约惩罚口径和手动预约限制状态归 `violation`
 - 提醒规则归 `notification`
 
 ## 10. 单元交付顺序

@@ -453,6 +453,7 @@
 用途：
 
 - 查询违约记录
+- 在指定单个用户时返回用户级违约次数统计和统一预约限制状态
 
 输入参数：
 
@@ -461,12 +462,107 @@
 - `room_id`
 - `date_from`
 - `date_to`
+- `page`
+- `page_size`
+
+返回核心字段：
+
+- `items`
+- `total`
+- `page`
+- `page_size`
+- `user_summary`
+
+`user_summary` 在请求能唯一定位单个用户时返回，核心字段：
+
+- `user_id`
+- `student_no`
+- `violation_count`
+- `is_penalized`
+- `restriction_source`
+- `penalty_start`
+- `penalty_end`
+- `manual_block_id`
+- `manual_block_reason`
+- `manual_block_started_at`
 
 说明：
 
 - 所有筛选条件均可选
 - 无筛选条件时默认分页返回全部违约记录
 - 管理端 HTML 页面发生参数错误时必须渲染统一页面错误，不返回裸 JSON
+- 用户级违约次数只统计已经落账的 `NO_SHOW_TIMEOUT` 记录，并按唯一 `reservation_id` 去重
+- 用户级违约次数统计不等同于统计大盘，不提供排行、趋势或复杂维度分析
+- `is_penalized` 是 `violation` 汇总后的统一预约限制状态，包含自动违约惩罚和管理员手动预约限制
+
+#### `POST /admin/violations/users/{user_id}/manual-block`
+
+用途：
+
+- 管理员手动开启指定用户的预约限制
+
+权限：
+
+- `violation.manual_blocks.write`
+- 服务端必须校验该权限，不能只依赖页面隐藏按钮
+
+输入核心字段：
+
+- `reason`
+
+返回核心字段：
+
+- `success`
+- `message`
+- `data`
+
+`data` 核心字段：
+
+- `user_id`
+- `manual_block_id`
+- `is_penalized`
+- `restriction_source`
+- `manual_block_reason`
+- `manual_block_started_at`
+
+说明：
+
+- 第一版手动预约限制为无期限限制，开启后持续生效，直到管理员解除
+- 同一用户同一时间最多只能存在一条有效手动预约限制
+- 重复开启已有效限制时不得生成多个有效限制，必须返回受控结果
+- 手动开启限制不得新增违约记录，不得修改预约记录
+
+#### `POST /admin/violations/users/{user_id}/manual-block/release`
+
+用途：
+
+- 管理员解除指定用户当前有效的手动预约限制
+
+权限：
+
+- `violation.manual_blocks.write`
+- 服务端必须校验该权限，不能只依赖页面隐藏按钮
+
+返回核心字段：
+
+- `success`
+- `message`
+- `data`
+
+`data` 核心字段：
+
+- `user_id`
+- `manual_block_id`
+- `is_penalized`
+- `restriction_source`
+- `released_at`
+
+说明：
+
+- 解除只影响手动预约限制，不清除违约记录，也不改变自动违约累计惩罚
+- 如果用户仍处于自动违约惩罚期，解除手动限制后 `is_penalized` 仍可为 `true`
+- 目标用户不存在或不存在有效手动预约限制时，必须返回受控业务错误
+- 解除时必须保留历史手动限制记录，不得物理删除
 
 #### `GET /admin/statistics/usage`
 

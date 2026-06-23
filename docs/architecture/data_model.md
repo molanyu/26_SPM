@@ -269,7 +269,39 @@
 
 - 当前阶段至少支持“预约超时未签到”类型
 
-### 3.13 SystemConfig
+### 3.13 UserReservationBlock
+
+职责：
+
+- 表示管理员手动开启的用户预约限制
+- 与自动违约累计惩罚一起由 `violation` 汇总为统一预约限制状态
+
+关键字段：
+
+- `id`
+- `user_id`
+- `reason`
+- `created_by_admin_id`
+- `created_at`
+- `released_by_admin_id`
+- `released_at`
+
+说明：
+
+- 第一版手动预约限制为无期限限制，开启后持续生效，直到管理员解除
+- `released_at` 为空表示当前限制有效
+- 解除限制时只填写解除信息，不物理删除历史记录
+- 手动预约限制不生成新的 `ViolationRecord`
+
+约束：
+
+- `user_id` 必须指向有效用户
+- `created_by_admin_id` 必须指向执行开启动作的管理员用户
+- `released_by_admin_id` 必须指向执行解除动作的管理员用户，且仅在解除后填写
+- 同一用户最多只能存在一条 `released_at IS NULL` 的有效手动预约限制
+- `reason` 必须记录管理员填写的限制原因
+
+### 3.14 SystemConfig
 
 职责：
 
@@ -289,7 +321,7 @@
 - 使用键值方式存储系统参数
 - 由 service 层负责转换为业务配置
 
-### 3.14 NotificationLog
+### 3.15 NotificationLog
 
 职责：
 
@@ -321,6 +353,7 @@
 - `StudyRoom` 1 -> N `CheckinCode`（历史兼容记录；当前动态码不依赖该关系）
 - `Reservation` 1 -> 0..1 `CheckinRecord`
 - `Reservation` 1 -> 0..1 `ViolationRecord`
+- `User` 1 -> N `UserReservationBlock`
 - `Reservation` 1 -> N `NotificationLog`
 
 ## 5. 必要约束
@@ -333,6 +366,8 @@
 - 同一座位在重叠时间段内不能被重复预约
 - 仅允许已预约状态进入签到
 - 超时未签到的预约必须转为失效并生成违约记录
+- 被 `violation` 统一预约限制状态命中的用户不得创建新预约
+- 管理员手动预约限制不得修改历史预约、签到或违约记录
 - 院系限定自习室只允许对应院系学生预约
 - 管理员用户必须存在可用 `email`
 - 学生用户必须存在可用 `student_no`
@@ -367,6 +402,7 @@
 
 - 业务主表默认使用软删除或 `is_active` 控制可用性
 - 预约、签到、违约、通知记录不允许物理删除
+- 手动预约限制记录不允许物理删除；解除时填写 `released_at` 和 `released_by_admin_id`
 - 自习室和座位注销后，不删除历史记录
 - 角色和权限调整不影响历史业务数据
 - 角色停用通过 `is_active=false` 实现，用于禁用或下线角色
