@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict kgYPBNmhHwoRmfN71mQnWoxi5h8BPFkcic9fRCjmB9OYkuIbRs4hGIujI7hCZOy
+\restrict u7xZtM2DMDKnfwsEU1FAdpYDRvxfigxuJyme4fir4hykz2wRDkyqrjCFdpQhT09
 
 -- Dumped from database version 16.13 (Debian 16.13-1.pgdg13+1)
 -- Dumped by pg_dump version 16.13 (Debian 16.13-1.pgdg13+1)
@@ -23,6 +23,9 @@ ALTER TABLE IF EXISTS ONLY public.violation_records DROP CONSTRAINT IF EXISTS vi
 ALTER TABLE IF EXISTS ONLY public.users DROP CONSTRAINT IF EXISTS users_department_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.user_roles DROP CONSTRAINT IF EXISTS user_roles_user_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.user_roles DROP CONSTRAINT IF EXISTS user_roles_role_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.user_reservation_blocks DROP CONSTRAINT IF EXISTS user_reservation_blocks_user_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.user_reservation_blocks DROP CONSTRAINT IF EXISTS user_reservation_blocks_released_by_admin_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.user_reservation_blocks DROP CONSTRAINT IF EXISTS user_reservation_blocks_created_by_admin_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.study_rooms DROP CONSTRAINT IF EXISTS study_rooms_department_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.seats DROP CONSTRAINT IF EXISTS seats_room_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.role_permissions DROP CONSTRAINT IF EXISTS role_permissions_role_id_fkey;
@@ -37,6 +40,7 @@ ALTER TABLE IF EXISTS ONLY public.checkin_records DROP CONSTRAINT IF EXISTS chec
 ALTER TABLE IF EXISTS ONLY public.checkin_records DROP CONSTRAINT IF EXISTS checkin_records_room_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.checkin_records DROP CONSTRAINT IF EXISTS checkin_records_reservation_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.checkin_codes DROP CONSTRAINT IF EXISTS checkin_codes_room_id_fkey;
+DROP INDEX IF EXISTS public.uq_user_reservation_blocks_active_user;
 DROP INDEX IF EXISTS public.ix_violation_records_violation_type;
 DROP INDEX IF EXISTS public.ix_violation_records_user_id;
 DROP INDEX IF EXISTS public.ix_violation_records_reservation_id;
@@ -44,6 +48,11 @@ DROP INDEX IF EXISTS public.ix_violation_records_occurred_at;
 DROP INDEX IF EXISTS public.ix_users_student_no;
 DROP INDEX IF EXISTS public.ix_users_email;
 DROP INDEX IF EXISTS public.ix_users_department_id;
+DROP INDEX IF EXISTS public.ix_user_reservation_blocks_user_id;
+DROP INDEX IF EXISTS public.ix_user_reservation_blocks_released_by_admin_id;
+DROP INDEX IF EXISTS public.ix_user_reservation_blocks_released_at;
+DROP INDEX IF EXISTS public.ix_user_reservation_blocks_created_by_admin_id;
+DROP INDEX IF EXISTS public.ix_user_reservation_blocks_created_at;
 DROP INDEX IF EXISTS public.ix_system_configs_config_key;
 DROP INDEX IF EXISTS public.ix_study_rooms_department_id;
 DROP INDEX IF EXISTS public.ix_seats_room_id;
@@ -75,6 +84,7 @@ ALTER TABLE IF EXISTS ONLY public.users DROP CONSTRAINT IF EXISTS users_student_
 ALTER TABLE IF EXISTS ONLY public.users DROP CONSTRAINT IF EXISTS users_pkey;
 ALTER TABLE IF EXISTS ONLY public.users DROP CONSTRAINT IF EXISTS users_email_key;
 ALTER TABLE IF EXISTS ONLY public.user_roles DROP CONSTRAINT IF EXISTS user_roles_pkey;
+ALTER TABLE IF EXISTS ONLY public.user_reservation_blocks DROP CONSTRAINT IF EXISTS user_reservation_blocks_pkey;
 ALTER TABLE IF EXISTS ONLY public.violation_records DROP CONSTRAINT IF EXISTS uq_violation_records_reservation_type;
 ALTER TABLE IF EXISTS ONLY public.user_roles DROP CONSTRAINT IF EXISTS uq_user_roles_user_role;
 ALTER TABLE IF EXISTS ONLY public.seats DROP CONSTRAINT IF EXISTS uq_seats_room_code;
@@ -104,6 +114,7 @@ ALTER TABLE IF EXISTS ONLY public.alembic_version DROP CONSTRAINT IF EXISTS alem
 ALTER TABLE IF EXISTS public.violation_records ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.users ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.user_roles ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.user_reservation_blocks ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.system_configs ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.study_rooms ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.seats ALTER COLUMN id DROP DEFAULT;
@@ -121,6 +132,8 @@ DROP SEQUENCE IF EXISTS public.users_id_seq;
 DROP TABLE IF EXISTS public.users;
 DROP SEQUENCE IF EXISTS public.user_roles_id_seq;
 DROP TABLE IF EXISTS public.user_roles;
+DROP SEQUENCE IF EXISTS public.user_reservation_blocks_id_seq;
+DROP TABLE IF EXISTS public.user_reservation_blocks;
 DROP SEQUENCE IF EXISTS public.system_configs_id_seq;
 DROP TABLE IF EXISTS public.system_configs;
 DROP SEQUENCE IF EXISTS public.study_rooms_id_seq;
@@ -598,6 +611,45 @@ ALTER SEQUENCE public.system_configs_id_seq OWNED BY public.system_configs.id;
 
 
 --
+-- Name: user_reservation_blocks; Type: TABLE; Schema: public; Owner: spm
+--
+
+CREATE TABLE public.user_reservation_blocks (
+    id integer NOT NULL,
+    user_id integer NOT NULL,
+    reason text NOT NULL,
+    created_by_admin_id integer NOT NULL,
+    created_at timestamp without time zone NOT NULL,
+    released_by_admin_id integer,
+    released_at timestamp without time zone
+);
+
+
+ALTER TABLE public.user_reservation_blocks OWNER TO spm;
+
+--
+-- Name: user_reservation_blocks_id_seq; Type: SEQUENCE; Schema: public; Owner: spm
+--
+
+CREATE SEQUENCE public.user_reservation_blocks_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.user_reservation_blocks_id_seq OWNER TO spm;
+
+--
+-- Name: user_reservation_blocks_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: spm
+--
+
+ALTER SEQUENCE public.user_reservation_blocks_id_seq OWNED BY public.user_reservation_blocks.id;
+
+
+--
 -- Name: user_roles; Type: TABLE; Schema: public; Owner: spm
 --
 
@@ -794,6 +846,13 @@ ALTER TABLE ONLY public.system_configs ALTER COLUMN id SET DEFAULT nextval('publ
 
 
 --
+-- Name: user_reservation_blocks id; Type: DEFAULT; Schema: public; Owner: spm
+--
+
+ALTER TABLE ONLY public.user_reservation_blocks ALTER COLUMN id SET DEFAULT nextval('public.user_reservation_blocks_id_seq'::regclass);
+
+
+--
 -- Name: user_roles id; Type: DEFAULT; Schema: public; Owner: spm
 --
 
@@ -819,7 +878,7 @@ ALTER TABLE ONLY public.violation_records ALTER COLUMN id SET DEFAULT nextval('p
 --
 
 COPY public.alembic_version (version_num) FROM stdin;
-20260506_000005
+20260623_000006
 \.
 
 
@@ -876,6 +935,7 @@ COPY public.permissions (id, name, code, description) FROM stdin;
 5	Assign User Roles	identity.users.roles.write	Allows assigning roles to users.
 6	创建用户账号	identity.users.write	允许创建单个学生账号或管理员账号。
 7	维护院系	identity.departments.write	允许查看、新增、启用和停用院系。
+8	维护手动预约限制	violation.manual_blocks.write	允许管理员手动开启和解除指定用户的预约限制。
 \.
 
 
@@ -905,9 +965,11 @@ COPY public.role_permissions (id, role_id, permission_id) FROM stdin;
 4	1	4
 5	1	5
 6	1	6
-7	2	1
-8	2	6
 9	1	7
+12	4	1
+13	4	5
+14	4	6
+15	1	8
 \.
 
 
@@ -917,7 +979,7 @@ COPY public.role_permissions (id, role_id, permission_id) FROM stdin;
 
 COPY public.roles (id, name, code, description, is_active) FROM stdin;
 1	System Admin	system_admin	Bootstrap system administrator role.	t
-2	admin1	admin1	admin1	t
+4	User_Administration	User_Administration	进行用户管理	t
 \.
 
 
@@ -953,6 +1015,18 @@ COPY public.system_configs (id, config_key, config_value, value_type, descriptio
 1	max_reservation_hours	4	int	Maximum reservation duration in hours.	2026-04-20 07:03:31.631211+00
 2	checkin_grace_minutes	10	int	Allowed check-in grace period in minutes.	2026-04-20 07:03:31.631215+00
 3	violation_threshold_minutes	15	int	Violation threshold after missed check-in in minutes.	2026-04-20 07:03:31.631215+00
+4	violation_penalty_threshold_count	3	int	Violation count required to trigger reservation penalty.	2026-06-22 07:48:15.458877+00
+5	violation_penalty_window_days	30	int	Rolling window in days for violation penalty calculation.	2026-06-22 07:48:15.458897+00
+6	violation_penalty_duration_days	7	int	Penalty duration in days after violation threshold is reached.	2026-06-22 07:48:15.458898+00
+\.
+
+
+--
+-- Data for Name: user_reservation_blocks; Type: TABLE DATA; Schema: public; Owner: spm
+--
+
+COPY public.user_reservation_blocks (id, user_id, reason, created_by_admin_id, created_at, released_by_admin_id, released_at) FROM stdin;
+1	4	违约次数过多	2	2026-06-23 16:10:44.422655	2	2026-06-23 16:10:49.197651
 \.
 
 
@@ -962,6 +1036,7 @@ COPY public.system_configs (id, config_key, config_value, value_type, descriptio
 
 COPY public.user_roles (id, user_id, role_id) FROM stdin;
 1	2	1
+2	5	4
 \.
 
 
@@ -971,7 +1046,8 @@ COPY public.user_roles (id, user_id, role_id) FROM stdin;
 
 COPY public.users (id, student_no, name, email, password_hash, department_id, is_active, last_login_at, created_at, updated_at) FROM stdin;
 4	MANUAL-20260429-01-STU	MANUAL-20260429-01-学生	molanyu2001@gmail.com	pbkdf2_sha256$390000$TN0U28Y-Xn9ihRtbpV8O4Q$KX0pAtG6KRNpQfrhlGePUjaB_ncMEpJHKYYTHYGqXCY	2	t	2026-05-06 09:59:02.135721	2026-04-29 08:46:11.585717+00	2026-05-06 09:59:02.138169+00
-2	\N	admin	admin	pbkdf2_sha256$390000$DGofgVbR63h8NMbs8w-lBg$8aph9MZlvkj0jtxPFsnxpk7TVGUDow1l_J6ZjPwMGWo	\N	t	2026-06-01 07:29:40.814381	2026-04-20 08:08:55.679568+00	2026-06-01 07:29:40.816719+00
+5	\N	User_Administration	User_admin	pbkdf2_sha256$390000$C40fv2KhpynsN8PeAzGJOA$W56skTisiHHpMrWlo_oFAuUHuBefMU_5aW6W2HcWIds	2	t	2026-06-23 02:49:47.159148	2026-06-23 02:35:08.985019+00	2026-06-23 02:49:47.159663+00
+2	\N	admin	admin	pbkdf2_sha256$390000$DGofgVbR63h8NMbs8w-lBg$8aph9MZlvkj0jtxPFsnxpk7TVGUDow1l_J6ZjPwMGWo	\N	t	2026-06-23 07:58:52.512651	2026-04-20 08:08:55.679568+00	2026-06-23 07:58:52.515681+00
 3	123	张三	\N	pbkdf2_sha256$390000$vunQolk_w2t6fLNCZb6THA$syevY1Xik_EnKSBWlmPb05AMoS1ZwvCgLb6whJN3CTo	1	t	2026-04-22 02:30:51.886313	2026-04-22 02:29:51.758723+00	2026-04-22 02:30:51.88701+00
 1	PGc9b4779b	Postgres Student	3329727682@qq.com	pbkdf2_sha256$390000$lOkJ66R7iNy0wtdRs1zrwA$JagrRoD2xoF-LezoT70ye9bEMuUZvoUrmR-gfv3_mVs	1	t	2026-04-21 02:53:00.948087	2026-04-20 07:03:31.465732+00	2026-04-21 02:53:00.949059+00
 \.
@@ -1021,7 +1097,7 @@ SELECT pg_catalog.setval('public.notification_logs_id_seq', 6, true);
 -- Name: permissions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: spm
 --
 
-SELECT pg_catalog.setval('public.permissions_id_seq', 7, true);
+SELECT pg_catalog.setval('public.permissions_id_seq', 8, true);
 
 
 --
@@ -1035,14 +1111,14 @@ SELECT pg_catalog.setval('public.reservations_id_seq', 7, true);
 -- Name: role_permissions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: spm
 --
 
-SELECT pg_catalog.setval('public.role_permissions_id_seq', 9, true);
+SELECT pg_catalog.setval('public.role_permissions_id_seq', 15, true);
 
 
 --
 -- Name: roles_id_seq; Type: SEQUENCE SET; Schema: public; Owner: spm
 --
 
-SELECT pg_catalog.setval('public.roles_id_seq', 2, true);
+SELECT pg_catalog.setval('public.roles_id_seq', 4, true);
 
 
 --
@@ -1063,21 +1139,28 @@ SELECT pg_catalog.setval('public.study_rooms_id_seq', 7, true);
 -- Name: system_configs_id_seq; Type: SEQUENCE SET; Schema: public; Owner: spm
 --
 
-SELECT pg_catalog.setval('public.system_configs_id_seq', 3, true);
+SELECT pg_catalog.setval('public.system_configs_id_seq', 6, true);
+
+
+--
+-- Name: user_reservation_blocks_id_seq; Type: SEQUENCE SET; Schema: public; Owner: spm
+--
+
+SELECT pg_catalog.setval('public.user_reservation_blocks_id_seq', 1, true);
 
 
 --
 -- Name: user_roles_id_seq; Type: SEQUENCE SET; Schema: public; Owner: spm
 --
 
-SELECT pg_catalog.setval('public.user_roles_id_seq', 1, true);
+SELECT pg_catalog.setval('public.user_roles_id_seq', 2, true);
 
 
 --
 -- Name: users_id_seq; Type: SEQUENCE SET; Schema: public; Owner: spm
 --
 
-SELECT pg_catalog.setval('public.users_id_seq', 4, true);
+SELECT pg_catalog.setval('public.users_id_seq', 5, true);
 
 
 --
@@ -1293,6 +1376,14 @@ ALTER TABLE ONLY public.user_roles
 
 ALTER TABLE ONLY public.violation_records
     ADD CONSTRAINT uq_violation_records_reservation_type UNIQUE (reservation_id, violation_type);
+
+
+--
+-- Name: user_reservation_blocks user_reservation_blocks_pkey; Type: CONSTRAINT; Schema: public; Owner: spm
+--
+
+ALTER TABLE ONLY public.user_reservation_blocks
+    ADD CONSTRAINT user_reservation_blocks_pkey PRIMARY KEY (id);
 
 
 --
@@ -1518,6 +1609,41 @@ CREATE INDEX ix_system_configs_config_key ON public.system_configs USING btree (
 
 
 --
+-- Name: ix_user_reservation_blocks_created_at; Type: INDEX; Schema: public; Owner: spm
+--
+
+CREATE INDEX ix_user_reservation_blocks_created_at ON public.user_reservation_blocks USING btree (created_at);
+
+
+--
+-- Name: ix_user_reservation_blocks_created_by_admin_id; Type: INDEX; Schema: public; Owner: spm
+--
+
+CREATE INDEX ix_user_reservation_blocks_created_by_admin_id ON public.user_reservation_blocks USING btree (created_by_admin_id);
+
+
+--
+-- Name: ix_user_reservation_blocks_released_at; Type: INDEX; Schema: public; Owner: spm
+--
+
+CREATE INDEX ix_user_reservation_blocks_released_at ON public.user_reservation_blocks USING btree (released_at);
+
+
+--
+-- Name: ix_user_reservation_blocks_released_by_admin_id; Type: INDEX; Schema: public; Owner: spm
+--
+
+CREATE INDEX ix_user_reservation_blocks_released_by_admin_id ON public.user_reservation_blocks USING btree (released_by_admin_id);
+
+
+--
+-- Name: ix_user_reservation_blocks_user_id; Type: INDEX; Schema: public; Owner: spm
+--
+
+CREATE INDEX ix_user_reservation_blocks_user_id ON public.user_reservation_blocks USING btree (user_id);
+
+
+--
 -- Name: ix_users_department_id; Type: INDEX; Schema: public; Owner: spm
 --
 
@@ -1564,6 +1690,13 @@ CREATE INDEX ix_violation_records_user_id ON public.violation_records USING btre
 --
 
 CREATE INDEX ix_violation_records_violation_type ON public.violation_records USING btree (violation_type);
+
+
+--
+-- Name: uq_user_reservation_blocks_active_user; Type: INDEX; Schema: public; Owner: spm
+--
+
+CREATE UNIQUE INDEX uq_user_reservation_blocks_active_user ON public.user_reservation_blocks USING btree (user_id) WHERE (released_at IS NULL);
 
 
 --
@@ -1679,6 +1812,30 @@ ALTER TABLE ONLY public.study_rooms
 
 
 --
+-- Name: user_reservation_blocks user_reservation_blocks_created_by_admin_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: spm
+--
+
+ALTER TABLE ONLY public.user_reservation_blocks
+    ADD CONSTRAINT user_reservation_blocks_created_by_admin_id_fkey FOREIGN KEY (created_by_admin_id) REFERENCES public.users(id);
+
+
+--
+-- Name: user_reservation_blocks user_reservation_blocks_released_by_admin_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: spm
+--
+
+ALTER TABLE ONLY public.user_reservation_blocks
+    ADD CONSTRAINT user_reservation_blocks_released_by_admin_id_fkey FOREIGN KEY (released_by_admin_id) REFERENCES public.users(id);
+
+
+--
+-- Name: user_reservation_blocks user_reservation_blocks_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: spm
+--
+
+ALTER TABLE ONLY public.user_reservation_blocks
+    ADD CONSTRAINT user_reservation_blocks_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
 -- Name: user_roles user_roles_role_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: spm
 --
 
@@ -1722,5 +1879,5 @@ ALTER TABLE ONLY public.violation_records
 -- PostgreSQL database dump complete
 --
 
-\unrestrict kgYPBNmhHwoRmfN71mQnWoxi5h8BPFkcic9fRCjmB9OYkuIbRs4hGIujI7hCZOy
+\unrestrict u7xZtM2DMDKnfwsEU1FAdpYDRvxfigxuJyme4fir4hykz2wRDkyqrjCFdpQhT09
 
